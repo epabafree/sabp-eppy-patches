@@ -1,5 +1,39 @@
 # Release notes
 
+## v0.6.0: v2 spec rounds B and C (layout foundation, settings, library)
+
+### Layout
+- **One icon set:** Google's Material Symbols (Rounded, 24 dp grid, Apache 2.0) drawn as vectors, with
+  filled variants for selected navigation items. Replaces the hand-drawn icons.
+- **Navigation items are one component** (icon + label in a single container) used by the bottom bar,
+  rail and floating dock. Selecting a tab only changes colours, never sizes. Navigation labels scale with
+  the font setting up to 130 % so four tabs fit at 200 %.
+- **Mini-player has its own slot above the navigation.** Lists get a bottom inset equal to the dock's
+  measured height, so the last item is always reachable. Gesture and 3-button navigation are handled;
+  the dock steps aside while the keyboard is open; sheets keep their content above the navigation bar.
+- **Mini-player gestures:** swipe up opens the player, swipe down pauses and hides it (with Undo),
+  sideways changes chapter (or pauses, or nothing: Settings → Mini-player). TalkBack actions for all.
+
+### Settings
+- **Player settings in eppy's design** (Settings → Player settings): auto-rewind, short/long skip
+  intervals, headset and interruption behaviour, sleep-timer length, shake to extend, statistics. Each
+  row uses SABP's own key, so the classic screens show the same values and changes apply immediately.
+- **Back up, restore and reset eppy settings** (JSON file). SABP's data is never touched. eppy settings
+  now carry a schema version; updates never overwrite your choices.
+
+### Library
+- **Pull to refresh** (or the refresh button): reloads progress and states from SABP and checks your
+  library folders in the background for new, missing and moved books, with a summary you can dismiss
+  or stop. Adding the new books is SABP's own Full scan, one tap away.
+- **Sort** by recently played, title, progress, date added or length; **filter** all / in progress /
+  not started / finished; **grid or list** view with progress bars and time left. Choices are remembered.
+
+### Quality
+- **UI tests in CI:** every shared component is rendered on the JVM (Paparazzi) in all six styles, light
+  and dark, at 100 % and 200 % font, with automatic checks that icons sit centred on their labels and
+  indicators, labels aren't clipped, targets are at least 48 dp, and selection doesn't change layout.
+
+
 ## v0.5.0: v2 spec round A (inventory, diagnostics, safe patching)
 
 ### Added
