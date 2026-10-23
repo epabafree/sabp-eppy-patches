@@ -17,6 +17,10 @@ class FakeHost(base: Context, private val theme: EppyTheme) : Host {
         val m = ContextWrapper::class.java.getDeclaredMethod("attachBaseContext", Context::class.java)
         m.isAccessible = true
         m.invoke(it, base)
+        // Activity.onApplyThemeResource talks to the system server; hand it a ready theme instead.
+        val f = android.view.ContextThemeWrapper::class.java.getDeclaredField("mTheme")
+        f.isAccessible = true
+        f.set(it, base.theme)
     }
     val overlay = FrameLayout(base)
     val pushed = ArrayList<String>()
