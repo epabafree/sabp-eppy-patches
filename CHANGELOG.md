@@ -1,5 +1,18 @@
 # Release notes
 
+## v0.9.2: fixes the read-along crash loop (root cause found in the device log)
+
+- **Cause:** pairing an EPUB/PDF made eppy keep a persistent permission to that one file. Smart
+  AudioBook Player treats every persisted permission as a library *folder* and calls
+  `DocumentsContract.getTreeDocumentId()` on it when its PlayerService starts and in its statistics
+  task; for a single file that throws `IllegalArgumentException: Invalid URI`, so the service crashed on
+  every start. Clearing the app's data "fixed" it only because it also dropped the permission.
+- **Fix:** eppy now copies the paired document into its own storage and never keeps a permission to it.
+- **Self-repair:** at start-up (before SABP's service runs) eppy removes any such permission left by
+  older versions, keeping the pairing by copying the file first. Phones stuck in the crash loop recover
+  after updating, without clearing data.
+
+
 ## v0.9.1
 
 - **Crash reports you can reach without opening the app:** every crash is now also saved to

@@ -224,13 +224,18 @@ public final class ReadAlong {
     public void pair(Uri uri) {
         if (folderUri == null || !enabled()) return;
         cancel();
-        try {
-            c.getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (Throwable t) {
-            EppyDiag.log("readalong", "persistable permission not granted: " + t.getClass().getSimpleName());
+        // Never keep a persistent permission to the document: SABP crashes on any persisted
+        // permission that isn't a folder (see DocStore). Read a private copy instead.
+        String name = displayName(uri);
+        Uri copy = DocStore.importCopy(c, uri, name);
+        if (copy == null) {
+            errorTitle = "Couldn't read that file";
+            set(State.ERROR, "", "eppy couldn't copy the document. Check it opens in another app, or pick it again.");
+            return;
         }
-        docUri = uri.toString();
-        docName = displayName(uri);
+        if (docUri != null && !docUri.equals(copy.toString())) DocStore.deleteCopy(c, docUri);
+        docUri = copy.toString();
+        docName = name;
         prefs().edit().putString("doc:" + folderUri, docUri).putString("name:" + folderUri, docName).apply();
         anchorFile().delete();
         alignment.clear(-1);
@@ -243,7 +248,10 @@ public final class ReadAlong {
     public void unpair() {
         if (folderUri == null) return;
         cancel();
-        if (docUri != null) textCache(docUri).delete();
+        if (docUri != null) {
+            textCache(docUri).delete();
+            DocStore.deleteCopy(c, docUri);
+        }
         prefs().edit().remove("doc:" + folderUri).remove("name:" + folderUri).apply();
         anchorFile().delete();
         docUri = null;
