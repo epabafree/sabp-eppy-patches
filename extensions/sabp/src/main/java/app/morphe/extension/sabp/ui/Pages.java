@@ -9,6 +9,8 @@ public final class Pages {
         switch (key) {
             case DiagnosticsPage.KEY:
                 return new DiagnosticsPage(host);
+            case PlayerSettingsPage.KEY:
+                return new PlayerSettingsPage(host);
             default:
                 return null;
         }

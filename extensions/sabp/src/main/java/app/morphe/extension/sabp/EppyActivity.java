@@ -101,6 +101,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         EppyDiag.ensure(this);
+        EppySettings.migrate(this);
         // "Player interface: Classic SABP" was chosen: hand over to the classic player.
         if (EppyRoute.redirectToClassicIfChosen(this)) return;
         player = EppyPlayer.get(this);
@@ -617,6 +618,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IO) {
+            java.util.function.Consumer<android.net.Uri> cb = pendingDocument;
+            pendingDocument = null;
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && cb != null) cb.accept(data.getData());
+            return;
+        }
         if (requestCode == REQ_DOC && resultCode == RESULT_OK && data != null && data.getData() != null) {
             EppyBook b = player.book();
             if (b != null) {
@@ -626,6 +633,24 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 if (overlayPane != null) overlayPane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
                 else if (sidePane != null) sidePane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
             }
+        }
+    }
+
+    private static final int REQ_IO = 4713;
+    private java.util.function.Consumer<android.net.Uri> pendingDocument;
+
+    @Override
+    public void requestDocument(boolean create, String mime, String suggestedName, java.util.function.Consumer<android.net.Uri> result) {
+        Intent i = new Intent(create ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType(mime);
+        if (create && suggestedName != null) i.putExtra(Intent.EXTRA_TITLE, suggestedName);
+        pendingDocument = result;
+        try {
+            startActivityForResult(i, REQ_IO);
+        } catch (ActivityNotFoundException e) {
+            pendingDocument = null;
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -927,7 +952,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 .item(EppyIcon.HISTORY, "History", "Undo an accidental jump", () -> openSabp(EppyBridge.HISTORY_ACTIVITY))
                 .item(EppyIcon.CHART, "Statistics", "Listening time for this book", () -> openSabp(EppyBridge.STATS_ACTIVITY))
                 .item(EppyIcon.CLASSIC, "Classic player", "Chapters, equalizer, boost, full speed control", () -> openSabp(EppyBridge.PLAYER_ACTIVITY))
-                .item(EppyIcon.TUNE, "Player settings", null, () -> openSabp(EppyBridge.SETTINGS_ACTIVITY))
+                .item(EppyIcon.TUNE, "Player settings", null, () -> pushPage(app.morphe.extension.sabp.ui.PlayerSettingsPage.KEY, null))
                 .show();
     }
 

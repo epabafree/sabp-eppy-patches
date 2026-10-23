@@ -101,7 +101,7 @@ public final class Sheet {
         row.addView(texts, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         row.setClickable(true);
         row.setFocusable(true);
-        row.setContentDescription(label);
+        row.setContentDescription(label + (icon == EppyIcon.CHECK ? ", selected" : ""));
         row.setOnClickListener(v -> {
             Ui.haptic(v, t);
             dismiss();

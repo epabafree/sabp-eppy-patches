@@ -40,13 +40,17 @@ object Geometry {
     }
 
     /** All descendants of type T. */
-    inline fun <reified T : View> find(root: View): List<T> {
+    inline fun <reified T : View> find(root: View): List<T> = findAll(root, T::class.java)
+
+    fun <T : View> findAll(root: View, type: Class<T>): List<T> {
         val out = ArrayList<T>()
-        fun walk(v: View) {
-            if (v is T) out.add(v)
-            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        val stack = ArrayDeque<View>()
+        stack.add(root)
+        while (stack.isNotEmpty()) {
+            val v = stack.removeFirst()
+            if (type.isInstance(v)) out.add(type.cast(v))
+            if (v is ViewGroup) for (i in 0 until v.childCount) stack.add(v.getChildAt(i))
         }
-        walk(root)
         return out
     }
 }
