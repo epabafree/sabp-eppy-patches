@@ -268,18 +268,57 @@ public final class EppyPlayer {
     }
 
     /** Book (folder) name. SABP puts it in ALBUM. */
+    /**
+     * The book's name. SABP's media-session fields change meaning with its notification setting
+     * ("author and book title" puts the author in ALBUM and the book in TITLE; otherwise TITLE is
+     * the file/chapter), so the library entry for the playing folder comes first.
+     */
     public String bookTitle() {
         MediaMetadata m = controller != null ? controller.getMetadata() : null;
         if (m == null) return null;
+        Book lib = find(currentFolderUri());
+        if (lib != null && lib.title != null && !lib.title.trim().isEmpty()) return lib.title.trim();
         String album = m.getString(MediaMetadata.METADATA_KEY_ALBUM);
         if (album != null && !album.trim().isEmpty()) return album.trim();
         return m.getString(MediaMetadata.METADATA_KEY_TITLE);
     }
 
     /** Current chapter or file name. */
+    /** The current chapter (embedded chapter or file) from the book layout, else the session title. */
     public String chapterTitle() {
+        EppyBook b = book();
+        if (b != null && !b.chapters.isEmpty()) {
+            int idx = b.chapterIndexAt((int) bookPositionSeconds(), (int) filePositionSeconds());
+            if (idx >= 0) {
+                String t = b.chapters.get(idx).title;
+                if (t != null && !t.trim().isEmpty()) return t.trim();
+            }
+        }
         MediaMetadata m = controller != null ? controller.getMetadata() : null;
-        return m != null ? m.getString(MediaMetadata.METADATA_KEY_TITLE) : null;
+        String t = m != null ? m.getString(MediaMetadata.METADATA_KEY_TITLE) : null;
+        String book = bookTitle();
+        return t != null && book != null && t.trim().equals(book) ? null : t;
+    }
+
+    /**
+     * Position and length of the current chapter in ms ({pos, len}), or null when the layout
+     * isn't known. SABP's session reports either the file or the whole book depending on its
+     * progress setting, so the player uses this for its seek bar.
+     */
+    public long[] chapterProgressMs() {
+        EppyBook b = book();
+        double pos = bookPositionSeconds();
+        if (b == null || pos < 0 || b.chapters.isEmpty()) return null;
+        int idx = b.chapterIndexAt((int) pos, (int) filePositionSeconds());
+        if (idx < 0) return null;
+        EppyBook.ChapterItem ch = b.chapters.get(idx);
+        int len = ch.length;
+        if (len <= 0 && idx + 1 < b.chapters.size() && b.chapters.get(idx + 1).start > ch.start) len = b.chapters.get(idx + 1).start - ch.start;
+        if (len <= 0 && b.total > ch.start && idx == b.chapters.size() - 1) len = b.total - ch.start;
+        if (ch.start < 0 || len <= 0) return null;
+        // Extrapolate between position reads while playing.
+        long p = (long) ((pos - ch.start) * 1000);
+        return new long[]{Math.max(0, Math.min(len * 1000L, p)), len * 1000L, ch.start};
     }
 
     public Bitmap cover() {
@@ -635,10 +674,14 @@ public final class EppyPlayer {
 
     /** Jumps to a whole-book position. */
     public boolean jumpToBook(double seconds) {
+        return jumpToBook(seconds, true);
+    }
+
+    public boolean jumpToBook(double seconds, boolean resume) {
         EppyBook b = book();
         if (b == null) return false;
         Object[] loc = b.locate((int) Math.round(seconds));
-        return loc != null && jumpTo((String) loc[0], (Integer) loc[1]);
+        return loc != null && jumpTo((String) loc[0], (Integer) loc[1], resume);
     }
 
     /**

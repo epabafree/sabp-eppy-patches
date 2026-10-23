@@ -49,6 +49,9 @@ public final class PlayerPane implements EppyBookmarks.Listener {
     private boolean lastPlaying;
     private String lastSpeedLabel, lastSleepLabel;
     private LinearLayout sleepChip;
+    /** Book second where the seek bar's chapter starts, or -1 when it shows SABP's own range. */
+    private int chapterStart = -1;
+    private long sliderDur;
     private int coverSize;
 
     public PlayerPane(Host host, boolean embedded) {
@@ -138,12 +141,14 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         slider.setListener(new EppySlider.OnSeekListener() {
             @Override
             public void onSeekPreview(long ms) {
-                setTimes(ms, host.player().durationMs());
+                setTimes(ms, sliderDur);
             }
 
             @Override
             public void onSeek(long ms) {
-                host.player().seekTo(ms);
+                EppyPlayer pl = host.player();
+                if (chapterStart >= 0) pl.jumpToBook(chapterStart + ms / 1000.0, pl.isPlaying());
+                else pl.seekTo(ms);
             }
         });
 
@@ -344,8 +349,15 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         EppyPlayer p = host.player();
         long dur = p.durationMs();
         long pos = p.positionMs();
+        long[] cp = p.chapterProgressMs();
+        if (cp != null) {
+            pos = cp[0];
+            dur = cp[1];
+            chapterStart = (int) cp[2];
+        } else chapterStart = -1;
+        sliderDur = dur;
         slider.setProgress(pos, dur);
-        slider.setSeekEnabled(p.canSeek() && dur > 0);
+        slider.setSeekEnabled(p.canSeek() && dur > 0 && (chapterStart < 0 || app.morphe.extension.sabp.EppyBridge.has("jump")));
         setTimes(pos, dur);
         boolean playing = p.isPlaying();
         if (playing != lastPlaying || full) {

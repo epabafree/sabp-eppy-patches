@@ -1,5 +1,15 @@
 # Release notes
 
+## v0.8.1: fixes from the first on-device test (Xiaomi, Android 16)
+
+- **Book and chapter names were swapped or wrong** when SABP's notification is set to "author and book
+  title" (the player showed the author as the title). Titles now come from the library and the book's
+  chapter list instead of the media-session fields, whose meaning depends on that SABP setting.
+- **The seek bar covered the whole 33-hour book** for single-file books with embedded chapters, so it
+  barely moved. The seek bar, times and mini-player progress now follow the current chapter; seeking
+  stays within it and keeps play/pause.
+
+
 ## v0.8.0: v2 spec round E (speed, sleep timer, double-tap seek)
 
 ### Speed
