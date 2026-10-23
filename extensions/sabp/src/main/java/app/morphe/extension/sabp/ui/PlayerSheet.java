@@ -238,7 +238,14 @@ public final class PlayerSheet {
         styleTabs();
         // Keep the selected tab visible in the strip.
         TextView tv = tabViews[index];
-        tv.post(() -> tv.requestRectangleOnScreen(new Rect(0, 0, tv.getWidth(), tv.getHeight()), false));
+        tv.post(() -> {
+            if (tabStrip.getParent() instanceof HorizontalScrollView) {
+                HorizontalScrollView hs = (HorizontalScrollView) tabStrip.getParent();
+                int left = tv.getLeft() - Ui.dp(c, 12), right = tv.getRight() + Ui.dp(c, 12);
+                if (left < hs.getScrollX()) hs.smoothScrollTo(left, 0);
+                else if (right > hs.getScrollX() + hs.getWidth()) hs.smoothScrollTo(right - hs.getWidth(), 0);
+            }
+        });
     }
 
     private void saveScroll() {

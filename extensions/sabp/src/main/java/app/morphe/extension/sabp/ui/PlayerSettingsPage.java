@@ -31,7 +31,7 @@ public final class PlayerSettingsPage extends Page {
     public static final String KEY = "playerSettings";
 
     public PlayerSettingsPage(Host host) {
-        super(host, KEY, null, SabpPrefs.str(host.activity(), "settings", "Player settings"), true);
+        super(host, KEY, null, "Player settings", true);
         build();
         SabpPrefsWatch.watch(c, prefsListener);
     }

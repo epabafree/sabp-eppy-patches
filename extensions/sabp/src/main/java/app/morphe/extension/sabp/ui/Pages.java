@@ -11,6 +11,14 @@ public final class Pages {
                 return new DiagnosticsPage(host);
             case PlayerSettingsPage.KEY:
                 return new PlayerSettingsPage(host);
+            case BookmarksPage.KEY:
+                return new BookmarksPage(host);
+            case HistoryPage.KEY:
+                return new HistoryPage(host);
+            case StatisticsPage.KEY:
+                return new StatisticsPage(host);
+            case CharactersPage.KEY:
+                return new CharactersPage(host);
             default:
                 return null;
         }

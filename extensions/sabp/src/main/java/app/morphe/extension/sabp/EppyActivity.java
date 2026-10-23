@@ -177,6 +177,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         app.morphe.extension.sabp.ui.Page p = pageStack.remove(pageStack.size() - 1);
         pageKeys.remove(pageKeys.size() - 1);
         p.onRemoved();
+        if (pageStack.isEmpty()) for (int i = 0; i < navItems.size(); i++) navItems.get(i).setSelected(i % TAB_LABELS.length == tab);
         final View v = p.root;
         if (theme.reduceMotion) pages.removeView(v);
         else v.animate().translationX(Ui.dp(this, 48)).alpha(0f).setDuration(160).withEndAction(() -> pages.removeView(v)).start();
@@ -189,6 +190,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         }
         pageStack.clear();
         pageKeys.clear();
+        for (int i = 0; i < navItems.size(); i++) navItems.get(i).setSelected(i % TAB_LABELS.length == tab);
     }
 
     private int contentBottomInset() {
@@ -608,7 +610,9 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         bar.setBackground(Ui.rounded(inverse, Ui.dp(this, 8)));
         bar.setElevation(Ui.dp(this, 12));
         bar.addView(Ui.text(this, theme, message, 14, 500, onInverse), Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView action = Ui.text(this, theme, "Undo", 14, 650, theme.dark ? theme.onPrimaryContainer : theme.primaryContainer);
+        // Inverse surface: the action uses the opposite scheme's primary so it stays readable.
+        int actionColor = theme.dark ? EppyTheme.blend(theme.primary, 0xFF000000, 0.45f) : EppyTheme.blend(theme.primary, 0xFFFFFFFF, 0.55f);
+        TextView action = Ui.text(this, theme, "Undo", 14, 650, actionColor);
         action.setPadding(Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12));
         bar.addView(action);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 52), Gravity.BOTTOM);
@@ -909,7 +913,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @Override
     public void selectTab(int t) {
         if (t == TAB_BOOKMARKS) {
-            openSabp(EppyBridge.BOOKMARKS_ACTIVITY);
+            if (!pageStack.isEmpty() && app.morphe.extension.sabp.ui.BookmarksPage.KEY.equals(pageStack.get(pageStack.size() - 1).key)) return;
+            clearPages();
+            pushPage(app.morphe.extension.sabp.ui.BookmarksPage.KEY, null);
+            for (int i = 0; i < navItems.size(); i++) navItems.get(i).setSelected(i % TAB_LABELS.length == TAB_BOOKMARKS);
             return;
         }
         if (!pageStack.isEmpty()) clearPages();
@@ -981,13 +988,48 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
 
     @Override
     public void showMoreSheet() {
+        Host h = this;
+        Runnable refresh = () -> refreshAll(true);
+        boolean id3 = BookControls.id3Titles();
+        boolean rotate = BookControls.rotateActive(this);
+        int[] se = BookControls.skipStartEnd();
         new Sheet(root, theme, "More")
-                .item(EppyIcon.BOOKMARK, "Bookmarks", "Jump to or edit saved moments", () -> openSabp(EppyBridge.BOOKMARKS_ACTIVITY))
-                .item(EppyIcon.PERSON, "Characters", "Who's who in this book", () -> openSabp(EppyBridge.CHARACTERS_ACTIVITY))
-                .item(EppyIcon.HISTORY, "History", "Undo an accidental jump", () -> openSabp(EppyBridge.HISTORY_ACTIVITY))
-                .item(EppyIcon.CHART, "Statistics", "Listening time for this book", () -> openSabp(EppyBridge.STATS_ACTIVITY))
-                .item(EppyIcon.CLASSIC, "Classic player", "Chapters, equalizer, boost, full speed control", () -> openSabp(EppyBridge.PLAYER_ACTIVITY))
+                .item(EppyIcon.FILE, "Files", "Every file of this book; tap to play from its start", () -> app.morphe.extension.sabp.ui.ControlsPanels.showFiles(h))
+                .item(EppyIcon.SUBTITLES, "Subtitles", "The book's .srt lines; tap one to jump there", () -> app.morphe.extension.sabp.ui.ControlsPanels.showSubtitles(h))
+                .item(EppyIcon.CUT, "Skip start and end", se[0] > 0 || se[1] > 0 ? "Start " + se[0] + " s · end " + se[1] + " s" : "Off",
+                        () -> app.morphe.extension.sabp.ui.ControlsPanels.showSkipStartEnd(h, refresh))
+                .item(EppyIcon.EQUALIZER, "Equalizer", "Bands, balance, mono, pitch, noise reduction", () -> app.morphe.extension.sabp.ui.ControlsPanels.showEqualizer(h, refresh))
+                .item(EppyIcon.VOLUME, "Volume boost", app.morphe.extension.sabp.ui.ControlsPanels.boostLabel(BookControls.boost()),
+                        () -> app.morphe.extension.sabp.ui.ControlsPanels.showBoost(h, refresh))
+                .item(EppyIcon.REPEAT, "Repeat", BookControls.repeatLabel(BookControls.repeatMode()), () -> app.morphe.extension.sabp.ui.ControlsPanels.showRepeat(h, refresh))
+                .item(EppyIcon.TITLE, id3 ? "Show file names" : "Show ID3 titles", id3 ? "Now showing titles from the files' tags" : "Now showing file names", () -> {
+                    if (!BookControls.canId3()) {
+                        Toast.makeText(this, "Not available (see Diagnostics)", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    BookControls.setId3Titles(!id3);
+                    player.invalidateBook();
+                    refresh.run();
+                })
+                .item(EppyIcon.ROTATE, rotate ? "Turn off rotate to control" : "Rotate to control",
+                        "Tilt the phone left or right to rewind or skip (set the actions in SABP's Full version settings)", () -> {
+                            BookControls.setRotateActive(this, !rotate);
+                            Toast.makeText(this, rotate ? "Rotate to control off" : "Rotate to control on", Toast.LENGTH_SHORT).show();
+                        })
+                .item(EppyIcon.BOOKMARK, "Bookmarks", "Jump to or edit saved moments", () -> showPlayerSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_BOOKMARKS))
+                .item(EppyIcon.PERSON, "Characters", "Who's who in this book", () -> pushPage(app.morphe.extension.sabp.ui.CharactersPage.KEY, null))
+                .item(EppyIcon.HISTORY, "History", "Undo an accidental jump", () -> pushPage(app.morphe.extension.sabp.ui.HistoryPage.KEY, null))
+                .item(EppyIcon.CHART, "Statistics", "Listening time for this book", () -> pushPage(app.morphe.extension.sabp.ui.StatisticsPage.KEY, null))
+                .item(EppyIcon.BOOK, "Open a text or PDF file", "Files next to the audio, in another app", () -> app.morphe.extension.sabp.ui.ControlsPanels.showTextFiles(h))
+                .item(EppyIcon.CAST, "Audio output and cast", "Bluetooth, speakers and cast devices Android offers", () -> app.morphe.extension.sabp.ui.ControlsPanels.showOutputSwitcher(h))
                 .item(EppyIcon.TUNE, "Player settings", null, () -> pushPage(app.morphe.extension.sabp.ui.PlayerSettingsPage.KEY, null))
+                .item(EppyIcon.IMAGE, "Change cover", "Classic player: ⋮ → More → Select cover / Search cover",
+                        () -> app.morphe.extension.sabp.ui.ControlsPanels.openClassicFor(h, "⋮ → More → Select cover or Search cover"))
+                .item(EppyIcon.DELETE_FOREVER, "Delete files", "Classic player: ⋮ → More → Delete files",
+                        () -> app.morphe.extension.sabp.ui.ControlsPanels.openClassicFor(h, "⋮ → More → Delete current or finished files"))
+                .item(EppyIcon.CLASSIC, "Classic player", "Chromecast button, MP3 → Opus, help", () -> openSabp(EppyBridge.PLAYER_ACTIVITY))
+                .item(EppyIcon.POWER, "Exit", "Stop playback and close, like the notification's close button",
+                        () -> app.morphe.extension.sabp.ui.ControlsPanels.exit(h))
                 .show();
     }
 

@@ -46,6 +46,18 @@ public final class EppyBook {
     public final List<FileItem> files = new ArrayList<>();
     public final List<ChapterItem> chapters = new ArrayList<>();
     public boolean embeddedChapters;
+    /** Subtitle (SRT) lines of every file, in book order. */
+    public final List<SrtItem> srts = new ArrayList<>();
+    /** Text/PDF files SABP found next to the audio (its "Open PDF file" menu). */
+    public final List<String> textFiles = new ArrayList<>();
+
+    public static final class SrtItem {
+        public String fileName;
+        public String text;
+        public int startInFile; // seconds
+        public int endInFile;   // seconds
+        public int start = -1;  // seconds from book start
+    }
 
     /** Reads the current book from PlayerService. Returns null when nothing is loaded. */
     public static EppyBook current() {
@@ -99,6 +111,25 @@ public final class EppyBook {
                 b.embeddedChapters = true;
             }
         }
+        if (infos instanceof Object[]) {
+            Object[] arr = (Object[]) infos;
+            for (int i = 0; i < arr.length; i++) {
+                Object list = field(arr[i], "mSrts");
+                if (!(list instanceof List)) continue;
+                FileItem f = b.files.get(i);
+                for (Object o : (List<?>) list) {
+                    SrtItem it = new SrtItem();
+                    it.fileName = f.name;
+                    it.text = str(field(o, "mTitle"));
+                    it.startInFile = intVal(field(o, "mStartTime"), 0);
+                    it.endInFile = intVal(field(o, "mEndTime"), it.startInFile);
+                    it.start = f.start >= 0 ? f.start + it.startInFile : -1;
+                    b.srts.add(it);
+                }
+            }
+        }
+        Object tf = meta != null ? field(meta, "mTextFiles") : null;
+        if (tf instanceof String[]) for (String t : (String[]) tf) if (t != null) b.textFiles.add(t);
         if (!b.embeddedChapters) {
             for (FileItem f : b.files) {
                 ChapterItem c = new ChapterItem();

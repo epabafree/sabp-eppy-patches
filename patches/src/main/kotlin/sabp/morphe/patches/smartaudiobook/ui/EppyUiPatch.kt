@@ -44,7 +44,7 @@ private const val BOOKMARK = "$SABP/Bookmark;"
 private const val CHARACTER = "$SABP/CharacterDescription;"
 private const val SLEEP_SETTINGS = "$SABP/PlayerSettingsSleepActivity;"
 private const val SETTINGS_ACTIVITY = "$SABP/PlayerSettingsActivity;"
-const val EPPY_VERSION = "0.8.1"
+const val EPPY_VERSION = "0.9.0"
 private const val EPPY_ACTIVITY = "app.morphe.extension.sabp.EppyActivity"
 
 private fun newLauncherFilter(doc: org.w3c.dom.Document): Element =
@@ -180,6 +180,33 @@ private val eppyUiBytecodePatch = bytecodePatch(
             }
         }
 
+        // Classic-player controls eppy also offers. Each setter is the PlayerService call the classic
+        // player makes right before it animates the matching widget (those widget classes and
+        // methods keep their names), or the only PlayerService method taking that settings type.
+        fun serviceCallBefore(widgetCall: String, params: List<String>): MethodReference? {
+            for (m in playerActivity.methods) {
+                val refs = m.methodCalls()
+                for ((i, r) in refs.withIndex()) {
+                    if ("${r.definingClass}->${r.name}" != widgetCall) continue
+                    val setter = refs.subList(0, i).lastOrNull {
+                        it.definingClass == PLAYER_SERVICE && it.returnType == "V" &&
+                            it.parameterTypes.map(CharSequence::toString) == params
+                    }
+                    if (setter != null) return setter
+                }
+            }
+            return null
+        }
+        fun serviceSetter(type: String, publicOnly: Boolean) = service.methods.filter {
+            it.parameterTypes.map(CharSequence::toString) == listOf(type) && it.returnType == "V" &&
+                (!publicOnly || AccessFlags.PUBLIC.isSet(it.accessFlags))
+        }.singleOrNull()?.asReference()
+        val setBoost = hooks.optional("boost") { serviceCallBefore("Lak/alizandro/widget/BoostVolumeView;->setBoostLevelAnimated", listOf("I")) }
+        val setId3 = hooks.optional("id3Titles") { serviceCallBefore("Lak/alizandro/widget/Id3TitlesView;->setActivatedAnimated", listOf("Z")) }
+        val setEqualizer = hooks.optional("equalizer") { serviceSetter("$SABP/EqualizerLevels;", true) }
+        val setRepeat = hooks.optional("repeat") { serviceSetter("$SABP/RepeatSettings;", false) }
+        val setSkipStartEnd = hooks.optional("skipStartEnd") { serviceSetter("$SABP/SkipStartEndSettings;", false) }
+
         // ---- mutate ------------------------------------------------------------------------
         val mService = mutableClassDefBy(PLAYER_SERVICE)
         mService.methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
@@ -239,7 +266,8 @@ private val eppyUiBytecodePatch = bytecodePatch(
 
         // Package-private targets must be public: the extension lives in another package.
         listOfNotNull(books, coverKeys, loadCovers, seekTracking, seekTo, filePosition, jump, loadBookmarks, saveBookmarks,
-            loadCharacters, saveCharacters, setSpeed, sleepRemaining).forEach { makeAccessible(it) }
+            loadCharacters, saveCharacters, setSpeed, sleepRemaining, setBoost, setId3, setEqualizer, setRepeat,
+            setSkipStartEnd).forEach { makeAccessible(it) }
 
         // Fill in the EppyBridge stubs for everything that resolved.
         val bridge = mutableClassDefBy(BRIDGE)
@@ -362,6 +390,30 @@ private val eppyUiBytecodePatch = bytecodePatch(
                 """,
             )
         }
+        fun objectSetter(stubName: String, ref: MethodReference?, type: String) = ref?.let {
+            stub(stubName).replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                check-cast p1, $type
+                invoke-virtual {p0, p1}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        fun primitiveSetter(stubName: String, ref: MethodReference?) = ref?.let {
+            stub(stubName).replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        primitiveSetter("setBoost", setBoost)
+        primitiveSetter("setId3Titles", setId3)
+        objectSetter("setEqualizer", setEqualizer, "$SABP/EqualizerLevels;")
+        objectSetter("setRepeat", setRepeat, "$SABP/RepeatSettings;")
+        objectSetter("setSkipStartEnd", setSkipStartEnd, "$SABP/SkipStartEndSettings;")
         stub("isLinked").replaceBody(
             """
             const/4 v0, 0x1

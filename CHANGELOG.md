@@ -1,5 +1,31 @@
 # Release notes
 
+## v0.9.0: classic-player features in eppy
+
+Every control of the classic player now exists in eppy, using SABP's own engine and data:
+
+- **Equalizer** (5 bands, balance, mono, pitch, noise reduction), **volume boost** (tap to cycle,
+  hold for levels incl. quieter), **repeat** (file or book, 2–5 times or endless), **skip start and
+  end** of files, **ID3 titles** on/off, **rotate to control** on/off: new chips and More items, each
+  calling the same PlayerService setter the classic button uses (new patch hooks; see Diagnostics).
+- **Long skips:** hold rewind / fast forward for SABP's long skip (captions show both lengths).
+  Previous / next buttons go by chapter.
+- **Lock** the player controls (top bar), press and hold to unlock.
+- **Audio output / cast** (top bar): Android's output switcher.
+- **Subtitles:** the current .srt line shows under the title; tap it (or More → Subtitles) for the list.
+- **Files** list, **open a text/PDF file** from the book folder, **Exit**.
+- **Cover tap** plays/pauses, like the classic cover.
+- **Native screens instead of classic ones:** Bookmarks (all books, rename/note, delete with Undo,
+  share), History (recent books + this book's position history, tap to undo a jump), Listening
+  statistics (from SABP's statistics file: total, this month, last 12 months, per book), Characters
+  (add/edit/delete with Undo, saved in SABP's characters file).
+- Still in the classic player (labelled, one tap): change cover, delete files, Chromecast button,
+  MP3→Opus converter, help.
+
+Fixes: sheet tabs scroll to the selected tab; the Undo action is readable in dark themes; settings rows
+without icons line up; the Player settings page has the right title.
+
+
 ## v0.8.1: fixes from the first on-device test (Xiaomi, Android 16)
 
 - **Book and chapter names were swapped or wrong** when SABP's notification is set to "author and book

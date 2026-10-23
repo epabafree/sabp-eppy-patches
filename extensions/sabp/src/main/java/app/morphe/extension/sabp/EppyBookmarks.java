@@ -42,7 +42,11 @@ public final class EppyBookmarks {
     }
 
     public void addListener(Listener l) {
-        listeners.add(l);
+        if (!listeners.contains(l)) listeners.add(l);
+    }
+
+    public void removeListener(Listener l) {
+        listeners.remove(l);
     }
 
     private void changed() {

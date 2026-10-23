@@ -409,14 +409,14 @@ public final class SheetTabs {
             chars.setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 4));
             col.addView(chars);
             col.addView(source("Spoiler protection is on: no provider eppy can use offers verified spoiler-free character descriptions, so none are shown. "
-                    + "Your own notes live in SABP's Characters screen below."));
+                    + "Your own notes are in Characters below."));
 
             TextView more = Ui.text(c, t, "More", 16, 600, t.onSurface);
             more.setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 4));
             col.addView(more);
-            col.addView(link(EppyIcon.PERSON, "Characters", "Classic screen · names and notes", EppyBridge.CHARACTERS_ACTIVITY));
-            col.addView(link(EppyIcon.CHART, "Listening statistics", "Classic screen", EppyBridge.STATS_ACTIVITY));
-            col.addView(link(EppyIcon.HISTORY, "History", "Classic screen · undo accidental jumps", EppyBridge.HISTORY_ACTIVITY));
+            col.addView(Ui.linkRow(c, t, EppyIcon.PERSON, "Characters", "Names and your notes", v -> host.pushPage(CharactersPage.KEY, null)));
+            col.addView(Ui.linkRow(c, t, EppyIcon.CHART, "Listening statistics", "Time listened per month and book", v -> host.pushPage(StatisticsPage.KEY, null)));
+            col.addView(Ui.linkRow(c, t, EppyIcon.HISTORY, "History", "Undo an accidental jump, recent books", v -> host.pushPage(HistoryPage.KEY, null)));
         }
 
         /** Online information: cached record, lookup with candidate review, removal. */

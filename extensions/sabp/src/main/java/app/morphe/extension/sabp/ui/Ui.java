@@ -309,11 +309,13 @@ public final class Ui {
         LinearLayout row = row(c);
         row.setMinimumHeight(dp(c, 64));
         row.setPadding(dp(c, 16), dp(c, 8), dp(c, 16), dp(c, 8));
-        android.widget.ImageView iv = new android.widget.ImageView(c);
-        iv.setImageDrawable(new EppyIcon(icon, t.onSurfaceVariant));
-        LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(c, 24), dp(c, 24));
-        il.rightMargin = dp(c, 16);
-        row.addView(iv, il);
+        if (icon != 0) {
+            android.widget.ImageView iv = new android.widget.ImageView(c);
+            iv.setImageDrawable(new EppyIcon(icon, t.onSurfaceVariant));
+            LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(c, 24), dp(c, 24));
+            il.rightMargin = dp(c, 16);
+            row.addView(iv, il);
+        }
         LinearLayout texts = column(c);
         texts.addView(text(c, t, title, 16, 500, t.onSurface));
         if (summary != null) {

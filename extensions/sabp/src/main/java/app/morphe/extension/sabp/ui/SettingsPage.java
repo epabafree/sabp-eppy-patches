@@ -113,8 +113,9 @@ public final class SettingsPage {
         sabp.addView(Ui.linkRow(c, t, EppyIcon.TUNE, "Player settings", "Playback, skip intervals, sleep timer, statistics",
                 v -> host.pushPage(PlayerSettingsPage.KEY, null)));
         sabp.addView(link(EppyIcon.FOLDER, "Library manager", "Folders, finished books, covers, files", EppyBridge.LIBRARY_ACTIVITY));
-        sabp.addView(link(EppyIcon.CHART, "Listening statistics", "Time listened per day and book", EppyBridge.STATS_ACTIVITY));
-        sabp.addView(link(EppyIcon.HISTORY, "History", "Recent position changes, undo jumps", EppyBridge.HISTORY_ACTIVITY));
+        sabp.addView(Ui.linkRow(c, t, EppyIcon.CHART, "Listening statistics", "Time listened per month and book", v -> host.pushPage(StatisticsPage.KEY, null)));
+        sabp.addView(Ui.linkRow(c, t, EppyIcon.HISTORY, "History", "Recent books, undo accidental jumps", v -> host.pushPage(HistoryPage.KEY, null)));
+        sabp.addView(Ui.linkRow(c, t, EppyIcon.PERSON, "Characters", "Names and notes for the playing book", v -> host.pushPage(CharactersPage.KEY, null)));
         sabp.addView(link(EppyIcon.QUEUE, "Book queue", "Books to play next", EppyBridge.QUEUE_ACTIVITY));
         sabp.addView(link(EppyIcon.CLASSIC, "Classic player", "The original Smart AudioBook Player screen", EppyBridge.PLAYER_ACTIVITY));
 
