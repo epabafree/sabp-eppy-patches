@@ -1126,9 +1126,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 Toast.makeText(this, "Bookmark added", Toast.LENGTH_SHORT).show();
                 return true;
             case KeyEvent.KEYCODE_S:
-                if (player.sleepActive()) player.stopSleep();
+                boolean wasOn = player.sleepActive();
+                if (wasOn) player.stopSleep();
                 else player.startSleep(SabpPrefs.sleepMinutes(this));
-                Toast.makeText(this, player.sleepActive() ? "Sleep timer off" : "Sleep timer on", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, wasOn ? "Sleep timer off" : "Sleep timer on", Toast.LENGTH_SHORT).show();
                 return true;
             case KeyEvent.KEYCODE_LEFT_BRACKET:
             case KeyEvent.KEYCODE_RIGHT_BRACKET:

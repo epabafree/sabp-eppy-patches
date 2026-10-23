@@ -79,7 +79,7 @@ listed in eppy → Settings → Diagnostics → Patch hooks with the feature tha
 | `jump` | optional | the only `PlayerService (String, int, boolean) → void` | chapters, bookmarks, read-along taps | those jumps hidden |
 | `bookmarksLoad/Save` | optional | the static `(Context, String) → ArrayList` and `(Context, ArrayList, String) → void` on `Bookmark` | bookmarks | classic bookmarks screen |
 | `charactersLoad/Save` | optional | same shapes on `CharacterDescription` | characters | classic characters screen |
-| `speed` | optional | the only **public** `PlayerService (float, int) → void` | speed panel | SABP's speed toggle only |
+| `speed` | optional | the only **public** `PlayerService (float, int) → void` | speed panel, tap cycle, `[`/`]` keys | SABP's speed toggle only |
 | `sleepRemaining` | optional | the `PlayerService () → String` that calls `PlayerSettingsSleepActivity` and `PlayerActivity`'s formatter | sleep countdown | no countdown |
 | `classicMenu` | optional | the `PlayerActivity` method that inflates and shows a `PopupMenu` | **Switch to eppy** in the classic ⋮ menu | app-icon shortcut only |
 | `classicSettings` | optional | `PlayerSettingsActivity.onCreate`, after its first own-class call (the screen builder) | **Switch to eppy** row | app-icon shortcut only |
@@ -133,9 +133,9 @@ names). eppy never keeps its own copy of any of these.
 |---|---|---|---|---|---|
 | `LNMessageIsShown` | Boolean | false | — | PlayerSettingsActivity | internal state (not a user setting) |
 | `askForReviewTime` | Long | System.currentTimeMillis( | — | PlayerSettingsActivity | internal state (not a user setting) |
-| `autoRewind` | String | "Medium" | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
+| `autoRewind` | String | "Medium" | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `backButton_v2` | String | "Minimize" | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
-| `bigRewindIndex` | Int | 3 | — | ie | shared · edited in SABP's screen, opened from eppy |
+| `bigRewindIndex` | Int | 3 | — | ie | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `bookSorting` | Int | 0 | — | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `convertMp3ToOpusActivated` | Boolean | false | — | PlayerSettingsFullVersionSettingsActivity | classic-only (MP3→Opus converter) |
 | `convertMp3ToOpusCurrentFileIndex` | Int | 0 | — | PlayerSettingsFullVersionSettingsActivity | internal state (not a user setting) |
@@ -147,16 +147,16 @@ names). eppy never keeps its own copy of any of these.
 | `convertMp3ToOpusWithEmbeddedCover` | Boolean | true | — | PlayerSettingsFullVersionSettingsActivity | classic-only (MP3→Opus converter) |
 | `decoder_v12` | String | "App 1" | PlayerSettingsTroubleshootingActivity | PlayerSettingsTroubleshootingActivity | shared · edited in SABP's screen, opened from eppy |
 | `defaultNotification_v2` | Boolean | true | PlayerSettingsTroubleshootingActivity | PlayerSettingsTroubleshootingActivity | shared · edited in SABP's screen, opened from eppy |
-| `defaultPlaybackSpeed` | Float | 1.0f | — | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
+| `defaultPlaybackSpeed` | Float | 1.0f | — | PlayerSettingsFullVersionSettingsActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `defaultShowId3Titles` | Boolean | false | — | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
-| `defaultSkipSilence_v2` | Int | 0 | — | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
+| `defaultSkipSilence_v2` | Int | 0 | — | PlayerSettingsFullVersionSettingsActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `endOfBookAction` | String | "ShowListOfNewBooks" | — | cu | shared · edited in SABP's screen, opened from eppy |
 | `fadeoutNotificationVolume` | String | "0" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
 | `fixHeadsetControl` | Boolean | false | PlayerSettingsTroubleshootingActivity | PlayerSettingsTroubleshootingActivity | shared · edited in SABP's screen, opened from eppy |
 | `fixWearOSControl` | Boolean | false | PlayerSettingsTroubleshootingActivity | PlayerSettingsTroubleshootingActivity | shared · edited in SABP's screen, opened from eppy |
 | `forceExit` | String | "0" | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
 | `forceStop` | String | "2" | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
-| `headsetConnectPlay` | Boolean | false | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
+| `headsetConnectPlay` | Boolean | false | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `headsetDoublePress_v4` | Int | 0 | — | yo1 | shared · edited in SABP's screen, opened from eppy |
 | `headsetNextFile_v5` | Int | 1 | — | gd | shared · edited in SABP's screen, opened from eppy |
 | `headsetPreviousFile_v6` | Int | 2 | — | gd | shared · edited in SABP's screen, opened from eppy |
@@ -170,13 +170,13 @@ names). eppy never keeps its own copy of any of these.
 | `notificationAuthorNameAndBookTitle` | Boolean | e.booleanValue( | — | kj0 | shared · edited in SABP's screen, opened from eppy |
 | `notificationPositionInFile` | Boolean | f.booleanValue( | — | kj0 | shared · edited in SABP's screen, opened from eppy |
 | `openLibraryInAllBooksTab` | Boolean | true | — | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
-| `pauseOnMessage` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
-| `playbackStatisticsEnabled` | Boolean | true | LibrarySettingsActivity | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
+| `pauseOnMessage` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
+| `playbackStatisticsEnabled` | Boolean | true | LibrarySettingsActivity | LibrarySettingsActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `preventWordClippingLevel` | String | "0" | PlayerSettingsTroubleshootingActivity | PlayerSettingsTroubleshootingActivity | shared · edited in SABP's screen, opened from eppy |
 | `progressFormat` | String | "TimePercentLeft" | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `quickScroll` | Boolean | false | LibrarySettingsActivity | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `resetNotificationVolume` | String | "50" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
-| `resumePlaybackAtEndOfCall` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
+| `resumePlaybackAtEndOfCall` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `rewindButtonsPosition_v3` | Int | 5 | — | ie | shared · edited in SABP's screen, opened from eppy |
 | `rootCachePath` | String | "" | — | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `rotateActivated` | Boolean | false | — | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
@@ -184,7 +184,7 @@ names). eppy never keeps its own copy of any of these.
 | `rotateRight_v2` | Int | 0 | — | f01 | shared · edited in SABP's screen, opened from eppy |
 | `selectChapterDialogFragmentCheckboxesState` | Int | 0 | — | c51 | internal state (not a user setting) |
 | `selectFileDialogFragmentCheckboxesState` | Int | 0 | — | r51 | internal state (not a user setting) |
-| `shakeForce_v2` | String | "6" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
+| `shakeForce_v2` | String | "6" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `showBookQueueButton` | Boolean | false | LibrarySettingsActivity | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showBookmarksButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showBoostVolumeButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
@@ -192,7 +192,7 @@ names). eppy never keeps its own copy of any of these.
 | `showCharacterListButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showChromecastButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showConvertMp3ToOpusButton_v2` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
-| `showCoverOnLockScreen` | Boolean | true | PlayerSettingsAdvancedActivity | PlayerSettingsAdvancedActivity | shared · edited in SABP's screen, opened from eppy |
+| `showCoverOnLockScreen` | Boolean | true | PlayerSettingsAdvancedActivity | PlayerSettingsAdvancedActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `showEqualizerButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showFolderViewButton_v2` | Boolean | true | LibrarySettingsActivity | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showId3TitlesButton` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
@@ -204,17 +204,17 @@ names). eppy never keeps its own copy of any of these.
 | `showSkipStartAndEndButton` | Boolean | false | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showSortButton` | Boolean | false | LibrarySettingsActivity | LibrarySettingsActivity | shared · edited in SABP's screen, opened from eppy |
 | `showSrts` | Boolean | true | PlayerSettingsFullVersionSettingsActivity | PlayerSettingsFullVersionSettingsActivity | shared · edited in SABP's screen, opened from eppy |
-| `sleepActivated2` | Boolean | false | — | PlayerSettingsSleepActivity | internal state (not a user setting) |
+| `sleepActivated2` | Boolean | false | — | PlayerSettingsSleepActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `sleepScheduleDisabledUntilTime` | Long | 0L | — | m81 | internal state (not a user setting) |
 | `sleepScheduleEnabled` | Boolean | false | — | m81 | shared · edited in SABP's screen, opened from eppy |
 | `sleepScheduleTurningOff` | String | "06:00" | — | m81 | shared · edited in SABP's screen, opened from eppy |
 | `sleepScheduleTurningOn` | String | "22:00" | — | m81 | shared · edited in SABP's screen, opened from eppy |
-| `sleepTime` | String | "10" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
-| `smallRewindIndex` | Int | 2 | — | ie | shared · edited in SABP's screen, opened from eppy |
+| `sleepTime` | String | "10" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
+| `smallRewindIndex` | Int | 2 | — | ie | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `sortStartedBooksByPath` | Boolean | true | — | h91 | shared · edited in SABP's screen, opened from eppy |
-| `stopWhenOthersPlaying` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · edited in SABP's screen, opened from eppy |
+| `stopWhenOthersPlaying` | Boolean | true | PlayerSettingsPlaybackActivity | PlayerSettingsPlaybackActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `theme_v3` | String | "light" | — | PlayerSettingsAdvancedActivity | shared · edited in SABP's screen, opened from eppy |
-| `trackMotion` | String | "0" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
+| `trackMotion` | String | "0" | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `trialStartTime` | Long | new Date( | — | PlayerSettingsActivity | internal state (not a user setting) |
-| `turnOffSleepTimerInAndroidAuto` | Boolean | true | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · edited in SABP's screen, opened from eppy |
+| `turnOffSleepTimerInAndroidAuto` | Boolean | true | PlayerSettingsSleepActivity | PlayerSettingsSleepActivity | shared · **native in eppy** (Player settings, speed panel or sleep panel) and in SABP's screen |
 | `wmaFilesSupport` | Int | -1 | — | PlayerSettingsActivity | internal state (not a user setting) |
