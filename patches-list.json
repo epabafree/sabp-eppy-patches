@@ -1,7 +1,34 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "patches": [
+    {
+      "name": "Eppy UI",
+      "description": "Adds a new Material 3 interface: a Home screen with Continue Listening and shelves, a cover-grid Library with filters and search, and a Now Playing screen with a big play button, thick seek slider and quick chips. Floating mini-player, bottom navigation on phones, navigation rail and a two-pane player on tablets and foldables, dynamic or per-book colours, light/dark/black themes, keyboard shortcuts, TalkBack labels, reduced-motion and haptics settings. Playback still runs on SABP's own engine, and the classic screens stay one tap away.",
+      "default": true,
+      "dependencies": [
+        "ResourcePatch"
+      ],
+      "compatiblePackages": [
+        {
+          "packageName": "ak.alizandro.smartaudiobookplayer",
+          "name": "Smart AudioBook Player",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": "#33B5E5",
+          "signatures": null,
+          "targets": [
+            {
+              "version": "11.7.8",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
     {
       "name": "Material You theme",
       "description": "Replaces the old Holo-blue accent with your wallpaper colours (Android 12+) or a colour you choose, tints the dark and light backgrounds to match, and rounds dialogs, sheets, cards and progress bars the way Material 3 does. The in-app Light, Dark and Black theme choice keeps working.",
@@ -54,6 +81,33 @@
           "values": null
         }
       ]
+    },
+    {
+      "name": "Modern font",
+      "description": "Uses the rounded geometric Outfit font across the classic SABP screens (lists, settings, toolbars), keeping each label's weight. The Eppy UI always uses it.",
+      "default": true,
+      "dependencies": [
+        "ResourcePatch"
+      ],
+      "compatiblePackages": [
+        {
+          "packageName": "ak.alizandro.smartaudiobookplayer",
+          "name": "Smart AudioBook Player",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": "#33B5E5",
+          "signatures": null,
+          "targets": [
+            {
+              "version": "11.7.8",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
     }
   ]
 }
