@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.morphe.extension.sabp.shots.SheetTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-23T23:05:33.549Z" hostname="runnervmtai0g" time="0.778">
+  <properties/>
+  <testcase name="nestedScrolling" classname="app.morphe.extension.sabp.shots.SheetTest" time="0.333"/>
+  <testcase name="dragAndFling" classname="app.morphe.extension.sabp.shots.SheetTest" time="0.305"/>
+  <testcase name="tabsBackAndHandle" classname="app.morphe.extension.sabp.shots.SheetTest" time="0.139"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Oct 23, 2026 11:05:33 PM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+Oct 23, 2026 11:05:33 PM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: ImageReader_JNI [3]: Unable to acquire a buffer item, very likely client tried to acquire more than maxImages buffers
+Oct 23, 2026 11:05:33 PM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+Oct 23, 2026 11:05:34 PM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: ImageReader_JNI [3]: Unable to acquire a buffer item, very likely client tried to acquire more than maxImages buffers
+Oct 23, 2026 11:05:34 PM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+]]></system-err>
+</testsuite>
