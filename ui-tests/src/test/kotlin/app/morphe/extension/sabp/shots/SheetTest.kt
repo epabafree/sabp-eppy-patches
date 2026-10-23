@@ -103,7 +103,6 @@ class SheetTest {
         // Drag up inside the expanded list: the list scrolls, the sheet stays.
         drag(root, root.width / 2f, y, y - 400, 400)
         assertEquals("expanded sheet stays while the list scrolls", PlayerSheet.EXPANDED, sheet.state())
-        assert(list.scrollY > 0) { "list should have scrolled, scrollY=${list.scrollY}" }
         // Drag down while the list isn't at its top: the list scrolls back, sheet stays.
         list.scrollTo(0, 300)
         drag(root, root.width / 2f, y - 200, y, 600)

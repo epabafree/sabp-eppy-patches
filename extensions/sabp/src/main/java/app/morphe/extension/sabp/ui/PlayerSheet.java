@@ -256,11 +256,13 @@ public final class PlayerSheet {
     private void restoreScroll(View v) {
         int[] st = scrollState.get(current);
         if (st == null) return;
-        v.post(() -> {
+        Runnable apply = () -> {
             View s = firstScrollable(v);
             if (s instanceof android.widget.ListView && st[0] == 0) ((android.widget.ListView) s).setSelectionFromTop(st[1], st[2]);
             else if (s != null && st[0] == 1) s.scrollTo(0, st[1]);
-        });
+        };
+        apply.run();
+        v.post(apply); // again after layout, in case the content was re-measured
     }
 
     private static View firstScrollable(View v) {
