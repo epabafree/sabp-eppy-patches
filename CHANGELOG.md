@@ -1,5 +1,12 @@
 # Release notes
 
+## v0.9.1
+
+- **Crash reports you can reach without opening the app:** every crash is now also saved to
+  `Downloads/eppy/eppy-crash-<date-time>.txt` (in addition to Settings → Diagnostics), so a crash that
+  keeps the app from opening can still be sent.
+
+
 ## v0.9.0: classic-player features in eppy
 
 Every control of the classic player now exists in eppy, using SABP's own engine and data:

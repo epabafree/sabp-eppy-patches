@@ -137,6 +137,23 @@ public final class EppyDiag {
             out.write(report.getBytes(StandardCharsets.UTF_8));
         } catch (Throwable ignored) {
         }
+        // Also save a copy where the user can reach it without opening the app (a crash loop
+        // can make the app unusable): Downloads/eppy/eppy-crash-<time>.txt via MediaStore, which
+        // needs no permission for files the app creates itself.
+        try {
+            android.content.ContentValues v = new android.content.ContentValues();
+            v.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME,
+                    "eppy-crash-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".txt");
+            v.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+            v.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/eppy");
+            android.net.Uri uri = app.getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri != null) {
+                try (java.io.OutputStream out = app.getContentResolver().openOutputStream(uri)) {
+                    if (out != null) out.write(report.getBytes(StandardCharsets.UTF_8));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
         boolean ours = sw.toString().contains("app.morphe.extension.sabp");
         prefs().edit().putBoolean("crashPending", true).putBoolean("crashInEppy", ours).commit();
     }
