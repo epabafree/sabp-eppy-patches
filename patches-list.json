@@ -1,12 +1,13 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "patches": [
     {
       "name": "Eppy UI",
-      "description": "Adds a new Material 3 interface: a Home screen with Continue Listening and shelves, a cover-grid Library with filters and search, and a Now Playing screen with a big play button, thick seek slider and quick chips. Floating mini-player, bottom navigation on phones, navigation rail and a two-pane player on tablets and foldables, dynamic or per-book colours, light/dark/black themes, keyboard shortcuts, TalkBack labels, reduced-motion and haptics settings. Playback still runs on SABP's own engine, and the classic screens stay one tap away.",
+      "description": "Adds a new Material 3 interface. A Home screen with Continue Listening and shelves, a cover-grid Library, and Now Playing with a circular play button, Add/Remove bookmark, and a drag-up sheet: native Chapters, Read along (pair an EPUB/PDF and follow the narration), Bookmarks, Details and Up next. Six styles based on reference designs, a floating mini-player, adaptive navigation, accessibility and keyboard support. Playback stays on SABP's own engine. Best used with Hooman's SABP patch.",
       "default": true,
       "dependencies": [
+        "BytecodePatch",
         "ResourcePatch"
       ],
       "compatiblePackages": [
@@ -27,7 +28,78 @@
           ]
         }
       ],
-      "options": []
+      "options": [
+        {
+          "key": "startScreen",
+          "title": "Open Eppy UI on launch",
+          "description": "Makes the new Home screen what the app icon opens. Turn off to keep the classic player as the start screen and get a second \"Eppy\" launcher icon instead.",
+          "required": false,
+          "type": "kotlin.Boolean",
+          "default": true,
+          "values": null
+        },
+        {
+          "key": "defaultSkin",
+          "title": "Style",
+          "description": "The look the app starts with, based on the reference designs. Every style can also be switched in Eppy Settings → Style without re-patching.",
+          "required": false,
+          "type": "kotlin.String",
+          "default": "material",
+          "values": {
+            "Material You (wallpaper colours)": "material",
+            "Ember: dark with coral, ring player": "ember",
+            "Midnight: deep purple, lilac transcript player": "midnight",
+            "Lavender: light violet glass cards": "lavender",
+            "Paper: warm cream editorial": "paper",
+            "Mono: white, black and yellow": "mono"
+          }
+        },
+        {
+          "key": "speechMatching",
+          "title": "Read-along speech matching",
+          "description": "Lets Read along match the narration to your EPUB/PDF with Android's on-device speech recogniser (Android 13+). Adds the microphone permission, which Android's speech service requires even though only the audiobook's own audio is fed to it. You are asked before it's used. Turn off to keep read-along to manual sync only.",
+          "required": false,
+          "type": "kotlin.Boolean",
+          "default": true,
+          "values": null
+        },
+        {
+          "key": "defaultTheme",
+          "title": "Default theme",
+          "description": "Light, dark, black or follow the system. Can be changed later in Eppy settings.",
+          "required": false,
+          "type": "kotlin.String",
+          "default": "system",
+          "values": {
+            "Follow system": "system",
+            "Light": "light",
+            "Dark": "dark",
+            "Black (AMOLED)": "black"
+          }
+        },
+        {
+          "key": "defaultAccent",
+          "title": "Default accent",
+          "description": "Where the accent colour comes from. \"Book cover\" picks a readable colour from the playing book's artwork. Can be changed later in Eppy settings.",
+          "required": false,
+          "type": "kotlin.String",
+          "default": "wallpaper",
+          "values": {
+            "Wallpaper (Material You)": "wallpaper",
+            "Book cover": "cover",
+            "Custom colour": "custom"
+          }
+        },
+        {
+          "key": "customAccent",
+          "title": "Custom accent colour",
+          "description": "Hex colour used when the accent is \"Custom colour\", and on Android 11.",
+          "required": false,
+          "type": "kotlin.String",
+          "default": "#E8735A",
+          "values": null
+        }
+      ]
     },
     {
       "name": "Material You theme",
