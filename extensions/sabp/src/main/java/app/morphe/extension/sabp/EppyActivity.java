@@ -511,7 +511,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         } else inset = 0;
         int pad = inset + Ui.dp(this, 16);
         setScrollInset(home.root, pad);
-        setScrollInset(library.root, pad);
+        setScrollInset(library.scroll, pad);
         setScrollInset(settings.root, pad);
         for (app.morphe.extension.sabp.ui.Page p : pageStack) p.setBottomInset(pad);
         contentInset = inset;

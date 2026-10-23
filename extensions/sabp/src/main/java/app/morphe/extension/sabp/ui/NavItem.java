@@ -63,6 +63,10 @@ public final class NavItem extends LinearLayout {
 
         labelView = Ui.label(c, t, label, 12, 600, t.onSurfaceVariant);
         labelView.setIncludeFontPadding(false);
+        // Navigation labels scale with the font setting up to 130 %, as Material 3 recommends,
+        // so four destinations still fit on a phone at 200 %; content text scales fully.
+        float scale = Math.min(1.3f, c.getResources().getConfiguration().fontScale);
+        labelView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 12f * scale * c.getResources().getDisplayMetrics().density);
         labelView.setGravity(Gravity.CENTER_HORIZONTAL);
         labelView.setSingleLine(true);
         labelView.setEllipsize(TextUtils.TruncateAt.END);
