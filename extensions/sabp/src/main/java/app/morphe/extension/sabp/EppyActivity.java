@@ -107,6 +107,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         player = EppyPlayer.get(this);
         if (state == null) EppyRoute.handleSearch(this, getIntent());
         if (state != null) pendingSheetTab = state.getInt("sheetTab", -1);
+        if (state != null) pendingSheetState = state.getInt("sheetState", 2);
         else pendingSheetTab = getIntent() != null ? getIntent().getIntExtra(EppyRoute.EXTRA_SHEET_TAB, -1) : -1;
         if (state != null) {
             tab = state.getInt("tab", TAB_HOME);
@@ -142,6 +143,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     }
 
     private int pendingSheetTab = -1;
+    private int pendingSheetState = 2;
 
     // ---- page back stack ----------------------------------------------------------------------
     private final java.util.ArrayList<String[]> pageKeys = new java.util.ArrayList<>();
@@ -209,6 +211,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         out.putBoolean("playerOpen", playerOpen);
         int sheetTab = overlayPane != null ? overlayPane.openSheetTab() : sidePane != null ? sidePane.openSheetTab() : -1;
         out.putInt("sheetTab", sheetTab);
+        PlayerPane sp = overlayPane != null ? overlayPane : sidePane;
+        out.putInt("sheetState", sp != null ? sp.sheetState() : 0);
         java.util.ArrayList<String> keys = new java.util.ArrayList<>();
         for (String[] k : pageKeys) keys.add(k[0] + "\u0001" + (k[1] != null ? k[1] : ""));
         out.putStringArrayList("pages", keys);
@@ -241,7 +245,32 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     }
 
     private void registerBack() {
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            // Predictive back: while the gesture is in progress an open player sheet previews
+            // its collapse; cancelling puts it back.
+            android.window.OnBackAnimationCallback cb = new android.window.OnBackAnimationCallback() {
+                @Override
+                public void onBackInvoked() {
+                    handleBack();
+                }
+
+                @Override
+                public void onBackProgressed(android.window.BackEvent e) {
+                    PlayerPane p = overlayPane != null ? overlayPane : sidePane;
+                    if (p != null && p.sheetState() != app.morphe.extension.sabp.ui.PlayerSheet.COLLAPSED && Sheet.current == null) {
+                        p.backProgress(e.getProgress());
+                    }
+                }
+
+                @Override
+                public void onBackCancelled() {
+                    PlayerPane p = overlayPane != null ? overlayPane : sidePane;
+                    if (p != null) p.backCancelled();
+                }
+            };
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb);
+            backCallback = cb;
+        } else if (Build.VERSION.SDK_INT >= 33) {
             OnBackInvokedCallback cb = this::handleBack;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb);
             backCallback = cb;
@@ -421,8 +450,14 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         refreshAll(true);
         if (pendingSheetTab >= 0) {
             final int tabToOpen = pendingSheetTab;
+            final int stateToOpen = pendingSheetState;
             pendingSheetTab = -1;
-            root.post(() -> showPlayerSheet(tabToOpen));
+            pendingSheetState = 2;
+            root.post(() -> {
+                showPlayerSheet(tabToOpen);
+                PlayerPane p = overlayPane != null ? overlayPane : sidePane;
+                if (p != null && stateToOpen == app.morphe.extension.sabp.ui.PlayerSheet.HALF) p.restoreSheet(tabToOpen, stateToOpen);
+            });
         }
     }
 

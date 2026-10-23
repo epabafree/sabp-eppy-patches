@@ -386,4 +386,20 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         while (end < s.length() && ".,!?;:”’\"')—".indexOf(s.charAt(end)) >= 0) end++;
         return end;
     }
+
+    public int sheetState() {
+        return sheet.state();
+    }
+
+    public void restoreSheet(int tab, int state) {
+        sheet.restore(tab, state);
+    }
+
+    public void backProgress(float p) {
+        sheet.backProgress(p);
+    }
+
+    public void backCancelled() {
+        sheet.backCancelled();
+    }
 }

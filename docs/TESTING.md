@@ -53,3 +53,19 @@ recogniser's transcript quality, the edition, and the narration — **not measur
 - **Notification and headset controls** while eppy is visible and while it's in the background.
 
 To help: Settings → Diagnostics → **Run checks** and **Copy log / Copy crash report**. Paste them into an issue.
+
+## Automated UI tests (from v0.6.0)
+
+`ui-tests/` renders eppy's views on the JVM with Paparazzi (layoutlib) in GitHub Actions on every
+change, and publishes images, test XML and the Gradle log to the `ui-results` branch.
+
+- **ComponentShots:** navigation (bar, rail, floating dock), transport controls, chips and settings
+  rows in all six styles, light and dark, at 100 % and 200 % font. Asserts icon-in-indicator and
+  icon-over-label centring (±1 px), unclipped labels, ≥48 dp targets, and that selecting a tab changes
+  no geometry.
+- **SheetTest:** the player sheet driven with real touch events: slow drag rests half open, fling up
+  expands, a scrolled list scrolls before the sheet moves, a list at its top lets a fling move the
+  sheet, sideways swipe changes tab without moving the sheet, Back collapses, tabs keep scroll.
+
+These are real layout and touch checks, but on layoutlib, not a phone: they don't replace the device
+checklist (spec section 18), which still hasn't been run by the developer.
