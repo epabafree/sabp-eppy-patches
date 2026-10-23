@@ -51,7 +51,7 @@ public final class HomePage {
         root.setFillViewport(true);
         root.setClipToPadding(false);
         col = Ui.column(c);
-        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 140));
+        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 8));
         root.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         col.addView(header(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -528,7 +528,7 @@ public final class HomePage {
         return card;
     }
 
-    private View listRow(EppyPlayer.Book b) {
+    View listRow(EppyPlayer.Book b) {
         LinearLayout row = Ui.row(c);
         row.setPadding(0, Ui.dp(c, 8), 0, Ui.dp(c, 8));
         row.setMinimumHeight(Ui.dp(c, 72));
@@ -537,15 +537,36 @@ public final class HomePage {
         LinearLayout texts = Ui.column(c);
         texts.setPadding(Ui.dp(c, 16), 0, 0, 0);
         texts.addView(Ui.singleLine(Ui.text(c, t, b.title, 16, 500, t.onSurface)));
-        TextView s = Ui.text(c, t, stateName(b.state), 13, 400, t.onSurfaceVariant);
+        float pr = b.progress();
+        String sub = stateName(b.state);
+        if (b.length > 0 && b.state == EppyPlayer.STATE_STARTED && pr >= 0) {
+            sub = Math.round(pr * 100) + "% · " + Ui.duration(Math.max(0, b.length - b.position)) + " left";
+        } else if (b.length > 0 && b.state == EppyPlayer.STATE_NEW) {
+            sub = "Not started · " + Ui.duration(b.length);
+        }
+        TextView s = Ui.text(c, t, sub, 13, 400, t.onSurfaceVariant);
         s.setPadding(0, Ui.dp(c, 4), 0, 0);
         texts.addView(s);
+        if (pr > 0 && b.state == EppyPlayer.STATE_STARTED) {
+            android.widget.ProgressBar bar = new android.widget.ProgressBar(c, null, android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(1000);
+            bar.setProgress(Math.round(pr * 1000));
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(t.primary));
+            bar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(t.surfaceContainerHighest));
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 4));
+            bl.topMargin = Ui.dp(c, 6);
+            texts.addView(bar, bl);
+        }
         row.addView(texts, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         row.setBackground(Ui.ripple(t, null, Ui.dp(c, 16)));
         row.setClickable(true);
         row.setFocusable(true);
-        row.setContentDescription(b.title + ", " + stateName(b.state));
+        row.setContentDescription(b.title + ", " + sub);
         row.setOnClickListener(v -> host.playBook(b, true));
+        row.setOnLongClickListener(v -> {
+            bookSheet(b);
+            return true;
+        });
         return row;
     }
 

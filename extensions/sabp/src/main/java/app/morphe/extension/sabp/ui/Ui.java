@@ -141,7 +141,7 @@ public final class Ui {
         chip.setOrientation(LinearLayout.HORIZONTAL);
         chip.setGravity(Gravity.CENTER);
         chip.setMinimumHeight(dp(c, 40));
-        chip.setPadding(dp(c, icon != 0 ? 12 : 16), 0, dp(c, 16), 0);
+        chip.setPadding(dp(c, icon != 0 ? 12 : 16), dp(c, 6), dp(c, 16), dp(c, 6));
         int fill = selected ? t.secondaryContainer : t.surfaceContainerHigh;
         int fg = selected ? t.onSecondaryContainer : t.onSurface;
         chip.setBackground(ripple(t, rounded(fill, dp(c, 20)), dp(c, 20)));
@@ -160,7 +160,10 @@ public final class Ui {
             p.setTextSize(tv.getTextSize());
             tv.setMinWidth((int) Math.ceil(Math.max(p.measureText(reserveLabel), p.measureText(label))));
         }
-        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(c, 40));
+        tv.setIncludeFontPadding(false);
+        tv.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tl.gravity = Gravity.CENTER_VERTICAL;
         chip.addView(tv, tl);
         chip.setClickable(true);
         chip.setFocusable(true);

@@ -33,7 +33,7 @@ public final class SettingsPage {
         root = new ScrollView(c);
         root.setFillViewport(true);
         col = Ui.column(c);
-        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 140));
+        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 8));
         root.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         build();
     }
@@ -75,12 +75,21 @@ public final class SettingsPage {
         look.addView(toggle("High contrast", "Stronger text and outlines", "highContrast", t.highContrast));
         look.addView(toggle("Waveform seek bar", "A static waveform instead of the slider track", "waveform", t.waveformSeekBar));
 
+        LinearLayout mini = group("Mini-player");
+        mini.addView(label("Swipe sideways"));
+        mini.addView(segmented(new String[]{"Change chapter", "Pause and hide", "Off"},
+                new String[]{"chapters", "dismiss", "off"}, prefs().getString("miniSwipe", "chapters"), "miniSwipe"));
+        TextView mn = Ui.text(c, t, "Tap or swipe up to open the player. Swipe down to pause and hide it until you play again.", 13, 400, t.onSurfaceVariant);
+        mn.setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 12));
+        mini.addView(mn);
+
         LinearLayout motion = group("Motion and feedback");
         motion.addView(toggle("Reduce motion", "Skip transitions and shape animations", "reduceMotion", t.reduceMotion));
         motion.addView(toggle("Haptic feedback", "Vibrate lightly on taps", "haptics", t.haptics));
 
         LinearLayout sabp = group("Smart AudioBook Player");
-        sabp.addView(link(EppyIcon.TUNE, "Player settings", "Playback, sleep timer, skip, headset buttons", EppyBridge.SETTINGS_ACTIVITY));
+        sabp.addView(Ui.linkRow(c, t, EppyIcon.TUNE, "Player settings", "Playback, skip intervals, sleep timer, statistics",
+                v -> host.pushPage(PlayerSettingsPage.KEY, null)));
         sabp.addView(link(EppyIcon.FOLDER, "Library manager", "Folders, finished books, covers, files", EppyBridge.LIBRARY_ACTIVITY));
         sabp.addView(link(EppyIcon.CHART, "Listening statistics", "Time listened per day and book", EppyBridge.STATS_ACTIVITY));
         sabp.addView(link(EppyIcon.HISTORY, "History", "Recent position changes, undo jumps", EppyBridge.HISTORY_ACTIVITY));
@@ -89,6 +98,41 @@ public final class SettingsPage {
 
         LinearLayout info = group("Book information sources");
         bookInfo(info);
+
+        LinearLayout backup = group("Back up eppy settings");
+        backup.addView(Ui.linkRow(c, t, EppyIcon.DOWNLOAD, "Save a backup", "Appearance, player interface, read-along and book-information settings, as a JSON file",
+                v -> host.requestDocument(true, "application/json", "eppy-settings.json", uri -> {
+                    try (java.io.OutputStream out = c.getContentResolver().openOutputStream(uri, "wt")) {
+                        out.write(app.morphe.extension.sabp.EppySettings.export(c).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        android.widget.Toast.makeText(c, "Backup saved", android.widget.Toast.LENGTH_SHORT).show();
+                    } catch (Throwable e) {
+                        app.morphe.extension.sabp.EppyDiag.error("settings", "backup failed: " + e);
+                        android.widget.Toast.makeText(c, "Couldn't save the backup: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+                    }
+                })));
+        backup.addView(Ui.linkRow(c, t, EppyIcon.UPLOAD, "Restore from a backup", "Replaces eppy's settings. Smart AudioBook Player's data isn't touched.",
+                v -> host.requestDocument(false, "*/*", null, uri -> {
+                    try (java.io.InputStream in = c.getContentResolver().openInputStream(uri)) {
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        byte[] buf = new byte[8192];
+                        int r;
+                        while (in != null && (r = in.read(buf)) > 0 && bo.size() < 1_000_000) bo.write(buf, 0, r);
+                        int n = app.morphe.extension.sabp.EppySettings.restore(c, bo.toString("UTF-8"));
+                        android.widget.Toast.makeText(c, "Restored " + n + " settings", android.widget.Toast.LENGTH_SHORT).show();
+                        host.rebuild();
+                    } catch (Throwable e) {
+                        app.morphe.extension.sabp.EppyDiag.error("settings", "restore failed: " + e);
+                        android.widget.Toast.makeText(c, "That file isn't an eppy settings backup", android.widget.Toast.LENGTH_LONG).show();
+                    }
+                })));
+        backup.addView(Ui.linkRow(c, t, EppyIcon.RESET, "Reset eppy settings", "Back to the defaults. Your books, positions, bookmarks and SABP settings stay as they are.",
+                v -> new Sheet(host.overlayRoot(), t, "Reset eppy settings?")
+                        .item(EppyIcon.RESET, "Reset", "Style, theme, mini-player, feature switches", () -> {
+                            app.morphe.extension.sabp.EppySettings.reset(c);
+                            host.rebuild();
+                        })
+                        .item(EppyIcon.CLOSE, "Cancel", null, null)
+                        .show()));
 
         LinearLayout diag = group("Help and bug reports");
         diag.addView(Ui.linkRow(c, t, EppyIcon.CHECK, "Diagnostics", "Hooks, feature switches, storage, errors and an exportable log",

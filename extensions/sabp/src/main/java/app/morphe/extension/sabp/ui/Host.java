@@ -48,4 +48,10 @@ public interface Host {
 
     /** Removes the top screen; Back does the same. */
     void popPage();
+
+    /**
+     * Opens the system file picker to create (create=true) or open a document and hands the
+     * chosen Uri to result (not called when cancelled).
+     */
+    void requestDocument(boolean create, String mime, String suggestedName, java.util.function.Consumer<android.net.Uri> result);
 }

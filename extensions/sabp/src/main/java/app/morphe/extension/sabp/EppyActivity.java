@@ -48,7 +48,7 @@ import app.morphe.extension.sabp.ui.Ui;
  */
 public class EppyActivity extends Activity implements Host, EppyPlayer.Listener {
     public static final int TAB_HOME = 0, TAB_LIBRARY = 1, TAB_BOOKMARKS = 2, TAB_SETTINGS = 3;
-    private static final int[] TAB_ICONS = {EppyIcon.HOME, EppyIcon.LIBRARY, EppyIcon.BOOKMARK, EppyIcon.TUNE};
+    private static final int[] TAB_ICONS = {EppyIcon.HOME, EppyIcon.LIBRARY, EppyIcon.BOOKMARK, EppyIcon.SETTINGS};
     private static final String[] TAB_LABELS = {"Home", "Library", "Bookmarks", "Settings"};
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -70,6 +70,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     private ImageView miniCover;
     private View miniProgress;
     private LinearLayout navContainer;
+    private LinearLayout navBar;
+    private LinearLayout dock;
+    private LinearLayout frame;
+    private final java.util.ArrayList<app.morphe.extension.sabp.ui.NavItem> navItems = new java.util.ArrayList<>();
+    private boolean imeVisible;
+    private int sysBottom, imeBottom;
 
     private int tab = TAB_HOME;
     private boolean playerOpen;
@@ -95,6 +101,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         EppyDiag.ensure(this);
+        EppySettings.migrate(this);
         // "Player interface: Classic SABP" was chosen: hand over to the classic player.
         if (EppyRoute.redirectToClassicIfChosen(this)) return;
         player = EppyPlayer.get(this);
@@ -182,13 +189,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         pageKeys.clear();
     }
 
-    /** Space scrollable content keeps clear at the bottom so the last item is reachable. */
     private int contentBottomInset() {
-        int inset = Ui.dp(this, 24);
-        if (miniPlayer != null && player != null && player.hasSession()) inset += Ui.dp(this, 64 + 12);
-        if (widthClass == 0 && navContainer != null && theme.navStyle != EppyTheme.NAV_BAR) inset += Ui.dp(this, 82);
-        return inset;
+        return contentInset + Ui.dp(this, 16);
     }
+
 
     private void showPlayerSheet(int tabIndex) {
         if (sidePane != null) sidePane.showSheet(tabIndex);
@@ -295,21 +299,22 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         LinearLayout frame = new LinearLayout(this);
         frame.setOrientation(LinearLayout.HORIZONTAL);
         root.addView(frame, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        this.frame = frame;
 
+        navItems.clear();
+        navBar = null;
         if (widthClass >= 1) {
             navContainer = navRail();
             frame.addView(navContainer, new LinearLayout.LayoutParams(Ui.dp(this, 88), ViewGroup.LayoutParams.MATCH_PARENT));
         }
 
-        LinearLayout contentCol = Ui.column(this);
+        // Content area: the pages fill it; the dock (mini-player slot + bottom navigation) sits at
+        // its bottom edge. Scrollable content gets a bottom inset equal to the dock's measured
+        // height, so the last item always clears the mini-player and the navigation.
+        FrameLayout contentArea = new FrameLayout(this);
         pages = new FrameLayout(this);
-        contentCol.addView(pages, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        boolean floatingNav = widthClass == 0 && theme.navStyle != EppyTheme.NAV_BAR;
-        if (widthClass == 0 && !floatingNav) {
-            navContainer = bottomNav();
-            contentCol.addView(navContainer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        }
-        frame.addView(contentCol, Ui.lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        contentArea.addView(pages, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        frame.addView(contentArea, Ui.lp(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
 
         home = new HomePage(this);
         library = new LibraryPage(this, home);
@@ -321,15 +326,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         sidePane = null;
         overlayPane = null;
         miniPlayer = null;
-        if (floatingNav) {
-            navContainer = floatingNav();
-            FrameLayout.LayoutParams nl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 68),
-                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            nl.bottomMargin = Ui.dp(this, 14);
-            root.addView(navContainer, nl);
-        }
+        dock = null;
+        boolean floatingNav = widthClass == 0 && theme.navStyle != EppyTheme.NAV_BAR;
         if (widthClass == 2) {
-            // Two-pane: persistent Now Playing on the right.
+            // Two-pane: persistent Now Playing on the right, no mini-player.
             sidePane = new PlayerPane(this, true);
             FrameLayout paneWrap = new FrameLayout(this);
             paneWrap.setBackground(Ui.rounded(theme.surfaceContainerLow, Ui.dp(this, 28)));
@@ -342,26 +342,59 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
             sidePane.layoutCover(paneW);
             playerOpen = false;
         } else {
+            dock = Ui.column(this);
+            dock.setClipChildren(false);
+            dock.setClipToPadding(false);
             miniPlayer = buildMiniPlayer();
-            FrameLayout.LayoutParams ml = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 64), Gravity.BOTTOM);
+            LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 64));
             int side = Ui.dp(this, 12);
-            int navSpace = widthClass == 0 ? (floatingNav ? Ui.dp(this, 82) : Ui.dp(this, 80)) : 0;
-            ml.setMargins(side + (widthClass == 1 ? Ui.dp(this, 88) : 0), 0, side, navSpace + Ui.dp(this, 12));
+            ml.setMargins(side, 0, side, Ui.dp(this, widthClass == 0 && !floatingNav ? 8 : 12));
             if (widthClass == 1) {
                 ml.width = Math.min(Ui.dp(this, 560), getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 112));
-                ml.gravity = Gravity.BOTTOM | Gravity.END;
+                ml.gravity = Gravity.END;
             }
-            root.addView(miniPlayer, ml);
+            dock.addView(miniPlayer, ml);
+            if (widthClass == 0) {
+                if (floatingNav) {
+                    navContainer = floatingNav();
+                    LinearLayout.LayoutParams nl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    nl.gravity = Gravity.CENTER_HORIZONTAL;
+                    nl.bottomMargin = Ui.dp(this, 14);
+                    dock.addView(navContainer, nl);
+                } else {
+                    navContainer = bottomNav();
+                    navBar = navContainer;
+                    dock.addView(navContainer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                }
+            }
+            contentArea.addView(dock, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+            dock.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (b - t != ob - ot) applyContentInset();
+            });
         }
 
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             android.graphics.Insets ime = insets.getInsets(WindowInsets.Type.ime());
-            v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
-            if (navContainer != null && widthClass == 0) {
-                // The bottom bar colour runs under the gesture area.
-                root.setBackgroundColor(theme.surface);
+            imeVisible = insets.isVisible(WindowInsets.Type.ime());
+            sysBottom = bars.bottom;
+            imeBottom = imeVisible ? ime.bottom : 0;
+            v.setPadding(bars.left, bars.top, bars.right, 0);
+            if (dock != null) {
+                // The keyboard never covers a text field: the dock steps aside while it's open.
+                dock.setVisibility(imeVisible ? View.GONE : View.VISIBLE);
+                if (navBar != null) {
+                    // The bar's colour runs under the gesture/3-button area; its items stay above it.
+                    navBar.setPadding(0, 0, 0, bars.bottom);
+                    dock.setPadding(0, 0, 0, 0);
+                } else {
+                    dock.setPadding(0, 0, 0, bars.bottom);
+                }
+            } else {
+                frame.setPadding(0, 0, 0, Math.max(bars.bottom, imeBottom));
             }
+            if (overlayPane != null) overlayPane.root.setPadding(0, 0, 0, Math.max(bars.bottom, imeBottom));
+            applyContentInset();
             return WindowInsets.CONSUMED;
         });
 
@@ -400,13 +433,14 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         c.setSystemBarsAppearance(theme.dark ? 0 : light, light);
     }
 
-    /** Material 3 navigation bar: pill indicator behind the selected icon, labels always shown. */
+    /** Material 3 navigation bar: indicator behind the selected icon, labels always shown. */
     private LinearLayout bottomNav() {
         LinearLayout bar = Ui.row(this);
         bar.setBackgroundColor(theme.surfaceContainer);
-        bar.setMinimumHeight(Ui.dp(this, 80));
+        bar.setGravity(Gravity.CENTER_VERTICAL);
         for (int i = 0; i < TAB_LABELS.length; i++) {
-            bar.addView(navItem(i, false), Ui.lp(0, Ui.dp(this, 80), 1));
+            app.morphe.extension.sabp.ui.NavItem item = navItem(i, app.morphe.extension.sabp.ui.NavItem.STYLE_BAR);
+            bar.addView(item, Ui.lp(0, Ui.dp(this, 80), 1));
         }
         return bar;
     }
@@ -425,34 +459,21 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         fl.bottomMargin = Ui.dp(this, 28);
         rail.addView(fab, fl);
         for (int i = 0; i < TAB_LABELS.length; i++) {
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 80), Ui.dp(this, 72));
-            lp.bottomMargin = Ui.dp(this, 4);
-            rail.addView(navItem(i, true), lp);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 80), ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = Ui.dp(this, 12);
+            rail.addView(navItem(i, app.morphe.extension.sabp.ui.NavItem.STYLE_RAIL), lp);
         }
         return rail;
     }
 
-    private View navItem(int index, boolean rail) {
-        LinearLayout item = Ui.column(this);
-        item.setGravity(Gravity.CENTER);
-        boolean sel = index == tab;
-        FrameLayout pill = new FrameLayout(this);
-        pill.setBackground(Ui.rounded(sel ? theme.secondaryContainer : 0, Ui.dp(this, 16)));
-        ImageView iv = new ImageView(this);
-        iv.setImageDrawable(new EppyIcon(TAB_ICONS[index], sel ? theme.onSecondaryContainer : theme.onSurfaceVariant));
-        pill.addView(iv, new FrameLayout.LayoutParams(Ui.dp(this, 24), Ui.dp(this, 24), Gravity.CENTER));
-        item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(this, rail ? 56 : 64), Ui.dp(this, 32)));
-        TextView label = Ui.label(this, theme, TAB_LABELS[index], 12, 600, sel ? theme.onSurface : theme.onSurfaceVariant);
-        label.setPadding(0, Ui.dp(this, 4), 0, 0);
-        item.addView(label);
-        item.setClickable(true);
-        item.setFocusable(true);
-        item.setBackground(Ui.ripple(theme, null, Ui.dp(this, 16)));
-        item.setContentDescription(TAB_LABELS[index] + (sel ? ", selected" : ""));
+    private app.morphe.extension.sabp.ui.NavItem navItem(int index, int style) {
+        app.morphe.extension.sabp.ui.NavItem item = new app.morphe.extension.sabp.ui.NavItem(this, theme, TAB_ICONS[index], TAB_LABELS[index], style);
+        item.setSelected(index == tab);
         item.setOnClickListener(v -> {
             Ui.haptic(v, theme);
             selectTab(index);
         });
+        navItems.add(item);
         return item;
     }
 
@@ -460,33 +481,48 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     private LinearLayout floatingNav() {
         LinearLayout bar = Ui.row(this);
         bar.setGravity(Gravity.CENTER);
-        bar.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+        bar.setPadding(Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
         float r = Ui.dp(this, theme.navStyle == EppyTheme.NAV_PILL_DARK ? 34 : 24);
         bar.setBackground(Ui.rounded(theme.navBg, r));
         bar.setElevation(Ui.dp(this, 10));
         for (int i = 0; i < TAB_LABELS.length; i++) {
-            final int index = i;
-            boolean sel = i == tab;
-            FrameLayout item = new FrameLayout(this);
-            int size = Ui.dp(this, sel && theme.navStyle == EppyTheme.NAV_PILL_DARK ? 60 : 52);
-            float ir = theme.navStyle == EppyTheme.NAV_PILL_DARK || theme.skin.equals(EppyTheme.SKIN_LAVENDER) ? size / 2f : Ui.dp(this, 16);
-            item.setBackground(Ui.ripple(theme, Ui.rounded(sel ? theme.navSelectedBg : 0, ir), ir));
-            ImageView iv = new ImageView(this);
-            iv.setImageDrawable(new EppyIcon(TAB_ICONS[i], sel ? theme.navSelectedFg : theme.onSurfaceVariant));
-            item.addView(iv, new FrameLayout.LayoutParams(Ui.dp(this, 24), Ui.dp(this, 24), Gravity.CENTER));
-            item.setClickable(true);
-            item.setFocusable(true);
-            item.setContentDescription(TAB_LABELS[i] + (sel ? ", selected" : ""));
-            item.setOnClickListener(v -> {
-                Ui.haptic(v, theme);
-                selectTab(index);
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
-            lp.leftMargin = Ui.dp(this, 4);
-            lp.rightMargin = Ui.dp(this, 4);
-            bar.addView(item, lp);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 56), Ui.dp(this, 52));
+            lp.leftMargin = Ui.dp(this, 2);
+            lp.rightMargin = Ui.dp(this, 2);
+            bar.addView(navItem(i, app.morphe.extension.sabp.ui.NavItem.STYLE_PILL), lp);
         }
         return bar;
+    }
+
+    /** Bottom inset for scrollable content: the dock's real height, or the keyboard's. */
+    private void applyContentInset() {
+        if (home == null) return;
+        int inset;
+        if (imeVisible) inset = imeBottom;
+        else if (dock != null && dock.getVisibility() == View.VISIBLE) {
+            int h = 0;
+            for (int i = 0; i < dock.getChildCount(); i++) {
+                View ch = dock.getChildAt(i);
+                if (ch.getVisibility() == View.GONE) continue;
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) ch.getLayoutParams();
+                h += ch.getHeight() + lp.topMargin + lp.bottomMargin;
+            }
+            inset = h + dock.getPaddingBottom();
+        } else inset = 0;
+        int pad = inset + Ui.dp(this, 16);
+        setScrollInset(home.root, pad);
+        setScrollInset(library.scroll, pad);
+        setScrollInset(settings.root, pad);
+        for (app.morphe.extension.sabp.ui.Page p : pageStack) p.setBottomInset(pad);
+        contentInset = inset;
+    }
+
+    private int contentInset;
+
+    private static void setScrollInset(ViewGroup scroll, int px) {
+        if (scroll.getPaddingBottom() == px) return;
+        scroll.setClipToPadding(false);
+        scroll.setPadding(scroll.getPaddingLeft(), scroll.getPaddingTop(), scroll.getPaddingRight(), px);
     }
 
     @Override
@@ -541,7 +577,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         action.setPadding(Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12));
         bar.addView(action);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 52), Gravity.BOTTOM);
-        lp.setMargins(Ui.dp(this, 12), 0, Ui.dp(this, 12), Ui.dp(this, 100));
+        lp.setMargins(Ui.dp(this, 12), 0, Ui.dp(this, 12), contentInset + Ui.dp(this, 12));
         root.addView(bar, lp);
         undoBar = bar;
         root.announceForAccessibility(message);
@@ -582,6 +618,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_IO) {
+            java.util.function.Consumer<android.net.Uri> cb = pendingDocument;
+            pendingDocument = null;
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && cb != null) cb.accept(data.getData());
+            return;
+        }
         if (requestCode == REQ_DOC && resultCode == RESULT_OK && data != null && data.getData() != null) {
             EppyBook b = player.book();
             if (b != null) {
@@ -591,6 +633,24 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 if (overlayPane != null) overlayPane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
                 else if (sidePane != null) sidePane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
             }
+        }
+    }
+
+    private static final int REQ_IO = 4713;
+    private java.util.function.Consumer<android.net.Uri> pendingDocument;
+
+    @Override
+    public void requestDocument(boolean create, String mime, String suggestedName, java.util.function.Consumer<android.net.Uri> result) {
+        Intent i = new Intent(create ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType(mime);
+        if (create && suggestedName != null) i.putExtra(Intent.EXTRA_TITLE, suggestedName);
+        pendingDocument = result;
+        try {
+            startActivityForResult(i, REQ_IO);
+        } catch (ActivityNotFoundException e) {
+            pendingDocument = null;
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -661,10 +721,146 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         wrap.addView(miniProgress, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 3), Gravity.BOTTOM));
         wrap.setClickable(true);
         wrap.setFocusable(true);
-        wrap.setContentDescription("Open player");
+        wrap.setContentDescription("Mini-player. Double-tap to open the player");
         wrap.setOnClickListener(v -> openPlayer());
+        wrap.setOnTouchListener(new MiniSwipe());
+        wrap.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(R_EXPAND, "Expand player"));
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(R_NEXT, "Next chapter"));
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(R_PREV, "Previous chapter"));
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(R_DISMISS, "Pause and hide"));
+            }
+
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if (action == R_EXPAND) openPlayer();
+                else if (action == R_NEXT) player.skipChapter(1);
+                else if (action == R_PREV) player.skipChapter(-1);
+                else if (action == R_DISMISS) dismissMini();
+                else return super.performAccessibilityAction(host, action, args);
+                return true;
+            }
+        });
         wrap.setVisibility(View.GONE);
         return wrap;
+    }
+
+    private static final int R_EXPAND = 0x7e010001, R_NEXT = 0x7e010002, R_PREV = 0x7e010003, R_DISMISS = 0x7e010004;
+    private boolean miniDismissed;
+
+    /** Pause and hide the mini-player until playback starts again. */
+    private void dismissMini() {
+        if (player.isPlaying()) player.playPause();
+        miniDismissed = true;
+        updateMini();
+        showUndo("Playback paused", () -> {
+            miniDismissed = false;
+            if (!player.isPlaying()) player.playPause();
+            updateMini();
+        });
+    }
+
+    /**
+     * Mini-player gestures: tap opens the player, swipe up opens it, swipe down pauses and hides
+     * it, and a sideways swipe skips chapters or dismisses (Settings → Mini-player). The card
+     * follows the finger and springs back when the gesture is too short.
+     */
+    private final class MiniSwipe implements View.OnTouchListener {
+        private float downX, downY;
+        private int axis; // 0 undecided, 1 horizontal, 2 vertical
+        private android.view.VelocityTracker vt;
+
+        @Override
+        public boolean onTouch(View v, android.view.MotionEvent e) {
+            int slop = android.view.ViewConfiguration.get(v.getContext()).getScaledTouchSlop();
+            switch (e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    downX = e.getRawX();
+                    downY = e.getRawY();
+                    axis = 0;
+                    vt = android.view.VelocityTracker.obtain();
+                    vt.addMovement(e);
+                    return false; // let the click/ripple start
+                case android.view.MotionEvent.ACTION_MOVE: {
+                    if (vt != null) vt.addMovement(e);
+                    float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
+                    if (axis == 0) {
+                        if (Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy)) axis = 1;
+                        else if (Math.abs(dy) > slop) axis = 2;
+                        if (axis != 0) {
+                            v.setPressed(false);
+                            v.cancelLongPress();
+                            v.getParent().requestDisallowInterceptTouchEvent(true);
+                        }
+                    }
+                    if (axis == 1 && !"off".equals(miniSwipeMode())) {
+                        v.setTranslationX(dx);
+                        v.setAlpha(1f - Math.min(0.5f, Math.abs(dx) / v.getWidth()));
+                    } else if (axis == 2) {
+                        v.setTranslationY(dy < 0 ? dy * 0.4f : dy);
+                    }
+                    return axis != 0;
+                }
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL: {
+                    boolean up = e.getActionMasked() == android.view.MotionEvent.ACTION_UP;
+                    float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
+                    float vx = 0, vy = 0;
+                    if (vt != null) {
+                        vt.addMovement(e);
+                        vt.computeCurrentVelocity(1000);
+                        vx = vt.getXVelocity();
+                        vy = vt.getYVelocity();
+                        vt.recycle();
+                        vt = null;
+                    }
+                    int far = Ui.dp(v.getContext(), 56), fling = Ui.dp(v.getContext(), 600);
+                    int decided = axis;
+                    axis = 0;
+                    if (up && decided == 2 && (dy < -far / 2f || vy < -fling)) {
+                        spring(v);
+                        openPlayer();
+                    } else if (up && decided == 2 && (dy > far || vy > fling)) {
+                        spring(v);
+                        dismissMini();
+                    } else if (up && decided == 1 && (Math.abs(dx) > far * 1.5f || Math.abs(vx) > fling)) {
+                        String mode = miniSwipeMode();
+                        spring(v);
+                        if ("dismiss".equals(mode)) dismissMini();
+                        else if ("chapters".equals(mode)) {
+                            Ui.haptic(v, theme);
+                            boolean next = dx < 0;
+                            if (!player.skipChapter(next ? 1 : -1)) {
+                                Toast.makeText(EppyActivity.this, next ? "No next chapter" : "No previous chapter", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    } else {
+                        spring(v);
+                    }
+                    return decided != 0;
+                }
+                default:
+                    return false;
+            }
+        }
+
+        private void spring(View v) {
+            if (theme.reduceMotion) {
+                v.setTranslationX(0);
+                v.setTranslationY(0);
+                v.setAlpha(1f);
+            } else {
+                v.animate().translationX(0).translationY(0).alpha(1f).setDuration(180)
+                        .setInterpolator(new PathInterpolator(0.2f, 0f, 0f, 1f)).start();
+            }
+        }
+    }
+
+    private String miniSwipeMode() {
+        return EppyTheme.prefs(this).getString("miniSwipe", "chapters");
     }
 
     // ---- navigation ------------------------------------------------------------------------
@@ -684,13 +880,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         if (!pageStack.isEmpty()) clearPages();
         if (t == tab) return;
         tab = t;
-        // Rebuild the navigation so the indicator moves; content views are kept.
-        ViewGroup parent = (ViewGroup) navContainer.getParent();
-        int idx = parent.indexOfChild(navContainer);
-        ViewGroup.LayoutParams lp = navContainer.getLayoutParams();
-        parent.removeView(navContainer);
-        navContainer = widthClass > 0 ? navRail() : theme.navStyle != EppyTheme.NAV_BAR ? floatingNav() : bottomNav();
-        parent.addView(navContainer, idx, lp);
+        // Only colours change: the items keep their geometry, so nothing reflows.
+        for (int i = 0; i < navItems.size(); i++) navItems.get(i).setSelected(i % TAB_LABELS.length == t);
         View page = t == TAB_HOME ? home.root : t == TAB_LIBRARY ? library.root : settings.root;
         showTab(t);
         if (!theme.reduceMotion) {
@@ -714,6 +905,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         playerOpen = true;
         overlayPane = new PlayerPane(this, false);
         root.addView(overlayPane.root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        overlayPane.root.setPadding(0, 0, 0, Math.max(sysBottom, imeBottom));
         overlayPane.layoutCover(getResources().getDisplayMetrics().widthPixels);
         overlayPane.update(true);
         if (miniPlayer != null) miniPlayer.setVisibility(View.GONE);
@@ -760,7 +952,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 .item(EppyIcon.HISTORY, "History", "Undo an accidental jump", () -> openSabp(EppyBridge.HISTORY_ACTIVITY))
                 .item(EppyIcon.CHART, "Statistics", "Listening time for this book", () -> openSabp(EppyBridge.STATS_ACTIVITY))
                 .item(EppyIcon.CLASSIC, "Classic player", "Chapters, equalizer, boost, full speed control", () -> openSabp(EppyBridge.PLAYER_ACTIVITY))
-                .item(EppyIcon.TUNE, "Player settings", null, () -> openSabp(EppyBridge.SETTINGS_ACTIVITY))
+                .item(EppyIcon.TUNE, "Player settings", null, () -> pushPage(app.morphe.extension.sabp.ui.PlayerSettingsPage.KEY, null))
                 .show();
     }
 
@@ -794,7 +986,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
 
     private void updateMini() {
         if (miniPlayer == null) return;
-        boolean show = player.hasSession() && !playerOpen;
+        if (player.isPlaying()) miniDismissed = false;
+        boolean show = player.hasSession() && !playerOpen && !miniDismissed;
         miniPlayer.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
         miniTitle.setText(player.bookTitle());

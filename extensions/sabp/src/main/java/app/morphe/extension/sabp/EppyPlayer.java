@@ -52,6 +52,15 @@ public final class EppyPlayer {
         public final String title;
         public final int state;
         public Bitmap cover;
+        /** From SABP's BookData when available: epoch ms, seconds, epoch ms (0/-1 = unknown). */
+        public long lastPlayed;
+        public int position = -1, length = -1;
+        public long added;
+
+        /** 0..1, or -1 when unknown. */
+        public float progress() {
+            return length > 0 && position >= 0 ? Math.min(1f, position / (float) length) : -1f;
+        }
 
         Book(String folderUri, String title, int state) {
             this.folderUri = folderUri;
@@ -348,6 +357,47 @@ public final class EppyPlayer {
         return null;
     }
 
+    private static Field libraryListField, libraryHolderField;
+
+    /**
+     * Every BookData in SABP's library (a copy). Found by shape, not by obfuscated name: the
+     * PlayerService field whose object holds an ArrayList of BookData. Main thread only.
+     */
+    public static List<Object> allBookData(Service service) {
+        ArrayList<Object> out = new ArrayList<>();
+        if (service == null) return out;
+        try {
+            if (libraryHolderField == null) {
+                String bookData = EppyBridge.SABP_PACKAGE + ".BookData";
+                outer:
+                for (Field hf : service.getClass().getDeclaredFields()) {
+                    if (hf.getType().isPrimitive() || hf.getType().getName().startsWith("java.") || hf.getType().getName().startsWith("android.")) continue;
+                    hf.setAccessible(true);
+                    Object holder = hf.get(service);
+                    if (holder == null) continue;
+                    for (Field lf : holder.getClass().getDeclaredFields()) {
+                        if (!java.util.List.class.isAssignableFrom(lf.getType())) continue;
+                        lf.setAccessible(true);
+                        Object v = lf.get(holder);
+                        if (v instanceof List && !((List<?>) v).isEmpty()
+                                && ((List<?>) v).get(0) != null && ((List<?>) v).get(0).getClass().getName().equals(bookData)) {
+                            libraryHolderField = hf;
+                            libraryListField = lf;
+                            break outer;
+                        }
+                    }
+                }
+            }
+            if (libraryHolderField == null) return out;
+            Object holder = libraryHolderField.get(service);
+            Object list = holder != null ? libraryListField.get(holder) : null;
+            if (list instanceof List) out.addAll((List<?>) list);
+        } catch (Throwable t) {
+            EppyDiag.log("library", "BookData list not reachable: " + t);
+        }
+        return out;
+    }
+
     private static Object field(Object o, String name) {
         try {
             Field f = o.getClass().getDeclaredField(name);
@@ -448,11 +498,16 @@ public final class EppyPlayer {
 
     /** Jumps to a file and position, like SABP's bookmarks and chapter list do. */
     public boolean jumpTo(String fileName, int seconds) {
+        return jumpTo(fileName, seconds, true);
+    }
+
+    /** resume=false leaves playback paused after the jump (SABP pauses while it moves). */
+    public boolean jumpTo(String fileName, int seconds, boolean resume) {
         Service service = EppyBridge.getPlayerService();
-        if (service == null || fileName == null || !EppyBridge.isLinked()) return false;
+        if (service == null || fileName == null || !EppyBridge.isLinked() || !EppyBridge.has("jump")) return false;
         main.post(() -> {
             try {
-                EppyBridge.jumpTo(service, fileName, Math.max(0, seconds), true);
+                EppyBridge.jumpTo(service, fileName, Math.max(0, seconds), resume);
             } catch (Throwable ignored) {
             }
             invalidateBook();
@@ -467,6 +522,45 @@ public final class EppyPlayer {
         if (b == null) return false;
         Object[] loc = b.locate((int) Math.round(seconds));
         return loc != null && jumpTo((String) loc[0], (Integer) loc[1]);
+    }
+
+    /**
+     * Seeks by a relative amount across file and chapter boundaries, clamped to the book, keeping
+     * the current play/pause state. Falls back to SABP's own small rewind/forward when the book
+     * layout isn't known.
+     */
+    public boolean seekBy(int deltaSeconds) {
+        EppyBook b = book();
+        double pos = bookPositionSeconds();
+        if (b == null || pos < 0 || b.total <= 0) {
+            command(deltaSeconds < 0 ? EppyBridge.ACTION_REWIND_SMALL : EppyBridge.ACTION_FWD_SMALL);
+            return false;
+        }
+        double target = Math.max(0, Math.min(b.total - 1, pos + deltaSeconds));
+        Object[] loc = b.locate((int) Math.round(target));
+        if (loc == null) return false;
+        return jumpTo((String) loc[0], (Integer) loc[1], isPlaying());
+    }
+
+    /** Next (+1) or previous (-1) chapter; previous restarts the current one if >3 s in. */
+    public boolean skipChapter(int dir) {
+        EppyBook b = book();
+        if (b == null || b.chapters.size() < 2) {
+            command(dir > 0 ? EppyBridge.ACTION_NEXT_FILE : EppyBridge.ACTION_PREV_FILE);
+            return false;
+        }
+        int pos = (int) bookPositionSeconds();
+        int idx = b.chapterIndexAt(pos, (int) filePositionSeconds());
+        int target;
+        if (dir > 0) target = idx + 1;
+        else {
+            EppyBook.ChapterItem cur = idx >= 0 ? b.chapters.get(idx) : null;
+            boolean intoChapter = cur != null && cur.start >= 0 && pos >= 0 && pos - cur.start > 3;
+            target = intoChapter ? idx : idx - 1;
+        }
+        if (target < 0 || target >= b.chapters.size()) return false;
+        EppyBook.ChapterItem ch = b.chapters.get(target);
+        return jumpTo(ch.fileName, ch.positionInFile, isPlaying());
     }
 
     public Context context() {
@@ -533,6 +627,26 @@ public final class EppyPlayer {
             } catch (Throwable t) {
                 libraryLoading = false;
                 return;
+            }
+            // Progress, last-played and added times from SABP's own BookData list.
+            try {
+                java.util.HashMap<String, Object> data = new java.util.HashMap<>();
+                for (Object bd : allBookData(service)) {
+                    Object u = field(bd, "mFolderUri");
+                    if (u instanceof String) data.put((String) u, bd);
+                }
+                for (List<Book> list : fresh) for (Book b : list) {
+                    Object bd = data.get(b.folderUri);
+                    if (bd == null) continue;
+                    Object lp = field(bd, "mLastPlaybackTime");
+                    Object ad = field(bd, "mAddTime");
+                    b.lastPlayed = lp instanceof Long ? (Long) lp : 0;
+                    b.added = ad instanceof Long ? (Long) ad : 0;
+                    b.position = intField(bd, "mCurrentPlaybackTimeCache");
+                    b.length = intField(bd, "mTotalPlaybackTimeCache");
+                }
+            } catch (Throwable t) {
+                EppyDiag.log("library", "book details unavailable: " + t);
             }
             // Keep covers we already have while the new ones load.
             for (int s = 0; s < 3; s++) {
