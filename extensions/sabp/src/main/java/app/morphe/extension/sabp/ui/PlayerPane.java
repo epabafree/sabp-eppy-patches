@@ -47,7 +47,8 @@ public final class PlayerPane implements EppyBookmarks.Listener {
     private Bitmap lastCover;
     private String lastChapter;
     private boolean lastPlaying;
-    private boolean sleepOn;
+    private String lastSpeedLabel, lastSleepLabel;
+    private LinearLayout sleepChip;
     private int coverSize;
 
     public PlayerPane(Host host, boolean embedded) {
@@ -102,6 +103,9 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         transcript.setOnClickListener(v -> sheet.show(PlayerSheet.TAB_READ));
         coverFrame.addView(transcript, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         col.addView(coverFrame);
+        new CoverGestures(c, t, CoverGestures.playerSeeker(c, host.player()), coverFrame, () -> {
+            if (transcript.getVisibility() == View.VISIBLE) sheet.show(PlayerSheet.TAB_READ);
+        });
 
         title = Ui.text(c, t, "", 25, 650, t.onSurface);
         title.setGravity(Gravity.CENTER);
@@ -213,13 +217,39 @@ public final class PlayerPane implements EppyBookmarks.Listener {
 
     private void buildChips() {
         chipRow.removeAllViews();
-        addChip(Ui.chip(c, t, EppyIcon.SPEED, formatSpeed(host.player().speed()), false,
-                v -> host.player().command(EppyBridge.ACTION_TOGGLE_SPEED)));
-        addChip(Ui.chip(c, t, EppyIcon.MOON, sleepOn ? "Sleep on" : "Sleep", sleepOn, "Sleep on", v -> {
-            sleepOn = !sleepOn;
-            host.player().command(sleepOn ? EppyBridge.ACTION_ENABLE_SLEEP : EppyBridge.ACTION_DISABLE_SLEEP);
-            buildChips();
-        }));
+        EppyPlayer pl = host.player();
+        lastSpeedLabel = PlaybackPanels.formatSpeed(pl.canSetSpeed() ? pl.bookSpeed() : pl.speed());
+        LinearLayout speedChip = Ui.chip(c, t, EppyIcon.SPEED, lastSpeedLabel, false, "0.75×", v -> {
+            if (pl.canSetSpeed()) {
+                float next = pl.nextSpeed(PlaybackPanels.speedCycle(c));
+                pl.setSpeed(next, pl.skipSilence());
+                lastSpeedLabel = PlaybackPanels.formatSpeed(next);
+                buildChips();
+                root.announceForAccessibility("Speed " + lastSpeedLabel);
+            } else {
+                pl.command(EppyBridge.ACTION_TOGGLE_SPEED);
+            }
+        });
+        speedChip.setOnLongClickListener(v -> {
+            PlaybackPanels.showSpeed(host, this::buildChips);
+            return true;
+        });
+        speedChip.setContentDescription("Speed " + lastSpeedLabel + ". Double-tap for the next speed, double-tap and hold for the speed panel.");
+        addChip(speedChip);
+
+        boolean sleepOn = pl.sleepActive();
+        lastSleepLabel = sleepLabel();
+        sleepChip = Ui.chip(c, t, EppyIcon.MOON, lastSleepLabel, sleepOn, "End of ch.", v -> {
+            if (pl.sleepActive()) pl.stopSleep();
+            else pl.startSleep(app.morphe.extension.sabp.SabpPrefs.sleepMinutes(c));
+            root.postDelayed(this::buildChips, 300);
+        });
+        sleepChip.setOnLongClickListener(v -> {
+            PlaybackPanels.showSleep(host, () -> root.postDelayed(this::buildChips, 300));
+            return true;
+        });
+        sleepChip.setContentDescription("Sleep timer " + (sleepOn ? lastSleepLabel : "off") + ". Double-tap to turn " + (sleepOn ? "off" : "on") + ", double-tap and hold for options.");
+        addChip(sleepChip);
         boolean marked = isBookmarked();
         bookmarkShown = marked;
         bookmarkChip = Ui.chip(c, t, marked ? EppyIcon.BOOKMARK : EppyIcon.BOOKMARK_ADD, marked ? "Remove bookmark" : "Add bookmark", marked,
@@ -263,11 +293,13 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         chipRow.addView(chip, lp);
     }
 
-    private static String formatSpeed(float s) {
-        String v = String.format(java.util.Locale.US, "%.2f", s);
-        while (v.endsWith("0")) v = v.substring(0, v.length() - 1);
-        if (v.endsWith(".")) v = v.substring(0, v.length() - 1);
-        return v + "×";
+    /** "Sleep", "9:58" while counting, or "End of ch." */
+    private String sleepLabel() {
+        EppyPlayer pl = host.player();
+        if (!pl.sleepActive()) return "Sleep";
+        if (app.morphe.extension.sabp.SabpPrefs.sleepMinutes(c) < 0) return "End of ch.";
+        String rem = pl.sleepRemaining();
+        return rem != null && !rem.isEmpty() ? rem : "Sleep on";
     }
 
     /** Sizes the cover to the available width (also called on layout changes). */
@@ -287,8 +319,11 @@ public final class PlayerPane implements EppyBookmarks.Listener {
 
     private void setTimes(long pos, long dur) {
         elapsed.setText(Ui.time(pos));
-        remaining.setText(dur > 0 ? "-" + Ui.time(Math.max(0, dur - pos)) : "");
-        remaining.setContentDescription(dur > 0 ? Ui.duration((dur - pos) / 1000) + " left in this chapter" : "");
+        // Time left in real time at the current speed.
+        float sp = host.player().speed();
+        long left = sp > 0 ? (long) (Math.max(0, dur - pos) / sp) : Math.max(0, dur - pos);
+        remaining.setText(dur > 0 ? "-" + Ui.time(left) : "");
+        remaining.setContentDescription(dur > 0 ? Ui.duration(left / 1000) + " left in this chapter" + (Math.abs(sp - 1f) > 0.01f ? " at " + PlaybackPanels.formatSpeed(sp) : "") : "");
     }
 
     /** Back press: close the sheet first. */
@@ -321,7 +356,17 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         float prog = p.bookProgress();
         if (ring != null) ring.setProgress(dur > 0 ? pos / (float) dur : 0f);
         boolean marked = isBookmarked();
-        if (bookmarkShown == null || marked != bookmarkShown) buildChips();
+        if (!p.sleepActive()) p.restoreSleepDefault();
+        String sl = sleepLabel();
+        String sp = PlaybackPanels.formatSpeed(p.canSetSpeed() ? p.bookSpeed() : p.speed());
+        boolean sleepStateChanged = (lastSleepLabel != null && lastSleepLabel.equals("Sleep")) != sl.equals("Sleep");
+        if (bookmarkShown == null || marked != bookmarkShown || sleepStateChanged || !sp.equals(lastSpeedLabel)) buildChips();
+        else if (!sl.equals(lastSleepLabel) && sleepChip != null) {
+            // Countdown: update the label in place so the row doesn't rebuild every second.
+            View last = sleepChip.getChildAt(sleepChip.getChildCount() - 1);
+            if (last instanceof TextView) ((TextView) last).setText(sl);
+            lastSleepLabel = sl;
+        }
         updateTranscript();
         sheet.refresh(false);
         if (!full) return;
@@ -335,6 +380,8 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         if (lastChapter != null && ch != null && !ch.equals(lastChapter)) root.announceForAccessibility("Now playing " + ch);
         lastChapter = ch;
         int rem = p.bookRemainingSeconds();
+        float bsp = p.speed();
+        if (rem > 0 && bsp > 0) rem = Math.round(rem / bsp);
         if (prog >= 0) {
             bookLine.setText(Math.round(prog * 100) + "% COMPLETE" + (rem >= 0 ? "  ·  " + Ui.duration(rem).toUpperCase() + " LEFT" : ""));
             bookLine.setVisibility(View.VISIBLE);

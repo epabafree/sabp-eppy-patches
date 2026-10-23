@@ -1,5 +1,42 @@
 # Release notes
 
+## v0.8.0: v2 spec round E (speed, sleep timer, double-tap seek)
+
+### Speed
+- **Tap the speed chip** to step to the next speed, wrapping around (0.5× … 3×, SABP's engine range;
+  0.25× isn't supported by it). With two or more **favourite speeds** (long-press a speed in the panel),
+  tapping cycles only those.
+- **Long-press for the speed panel:** a large readout, a slider in 0.05× steps with − / + buttons,
+  presets, reset to 1×, SABP's skip-silence levels, and "use for books you haven't started". Shows
+  the time left at the chosen speed. Changes go straight to SABP's engine (the same call its own dialog
+  makes); pitch is kept natural by the engine.
+- **Time left** under the seek bar and on the book line is now real time at the current speed.
+- Keyboard: `[` and `]` for slower / faster.
+
+### Sleep timer
+- **Tap the moon chip** to start or stop SABP's own timer; the chip counts down (`9:58`).
+- **Long-press for the timer panel:** 5–60 min presets, end of chapter, custom length, +5 min,
+  restart and turn off. The timer runs in SABP's service, so it works with the screen off, in the
+  background and in the classic player, and SABP's fade-out and shake-to-restart still apply.
+  Extending restarts SABP's timer with the time left + 5 and puts your usual length back afterwards.
+- Keyboard: `S` toggles the timer.
+
+### Double-tap seek on the cover
+- Double-tap the left half of the cover to go back, the right half to go forward; keep tapping to
+  add more (−10, −20, −30 s…), with a label on that side. A tap on the other side starts over.
+  Single taps wait out the double-tap window, so a double-tap never also does the single-tap action.
+- Step length: same as SABP's rewind button (default) or 5–60 s, or off (Settings → Cover gestures).
+  Uses SABP's own skip when the lengths match, so it crosses files natively.
+
+### Not possible on SABP's engine (stated rather than faked)
+- A configurable fade-out length and "end of N chapters": SABP's timer has no fade-out length setting, and it stops
+  at the end of the current file/chapter only.
+
+### Tests
+- `CoverGesturesTest`: single taps never seek, double-tap = one step, further taps accumulate, the other
+  side restarts the count, slow taps aren't a double-tap.
+
+
 ## v0.7.0: v2 spec round D (player sheet)
 
 - **Real draggable sheet** with three resting states: collapsed (tab strip peeking), half and fully open.

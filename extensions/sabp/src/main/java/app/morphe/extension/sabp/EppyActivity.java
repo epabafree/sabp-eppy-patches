@@ -1125,6 +1125,21 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 player.command(EppyBridge.ACTION_ADD_BOOKMARK);
                 Toast.makeText(this, "Bookmark added", Toast.LENGTH_SHORT).show();
                 return true;
+            case KeyEvent.KEYCODE_S:
+                boolean wasOn = player.sleepActive();
+                if (wasOn) player.stopSleep();
+                else player.startSleep(SabpPrefs.sleepMinutes(this));
+                Toast.makeText(this, wasOn ? "Sleep timer off" : "Sleep timer on", Toast.LENGTH_SHORT).show();
+                return true;
+            case KeyEvent.KEYCODE_LEFT_BRACKET:
+            case KeyEvent.KEYCODE_RIGHT_BRACKET:
+                if (player.canSetSpeed()) {
+                    float sp = player.bookSpeed() + (k == KeyEvent.KEYCODE_RIGHT_BRACKET ? 0.05f : -0.05f);
+                    player.setSpeed(sp, player.skipSilence());
+                    Toast.makeText(this, app.morphe.extension.sabp.ui.PlaybackPanels.formatSpeed(
+                            Math.round(Math.max(EppyPlayer.MIN_SPEED, Math.min(EppyPlayer.MAX_SPEED, sp)) * 20f) / 20f), Toast.LENGTH_SHORT).show();
+                }
+                return true;
             case KeyEvent.KEYCODE_1:
                 selectTab(TAB_HOME);
                 return true;

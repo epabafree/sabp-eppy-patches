@@ -413,6 +413,123 @@ public final class EppyPlayer {
         return v instanceof Integer ? (Integer) v : 0;
     }
 
+    // ---- speed (SABP's engine: 0.5–3.0, skip silence 0–5) -----------------------------------
+
+    public static final float MIN_SPEED = 0.5f, MAX_SPEED = 3.0f;
+    public static final float[] SPEED_PRESETS = {0.5f, 0.75f, 1.0f, 1.1f, 1.2f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f};
+
+    /** The current book's speed from SABP's BookData (falls back to the session's). */
+    public float bookSpeed() {
+        Object bd = currentBookData();
+        Object v = bd != null ? field(bd, "mPlaybackSpeed") : null;
+        if (v instanceof Float && (Float) v > 0) return (Float) v;
+        return speed();
+    }
+
+    /** Skip-silence level 0 (off) – 5 of the current book. */
+    public int skipSilence() {
+        Object bd = currentBookData();
+        return bd != null ? Math.max(0, Math.min(5, intField(bd, "mSkipSilence"))) : 0;
+    }
+
+    public boolean canSetSpeed() {
+        return EppyBridge.getPlayerService() != null && EppyBridge.has("speed");
+    }
+
+    /** Sets speed (clamped to SABP's range, 0.05 steps) and skip silence through PlayerService. */
+    public boolean setSpeed(float speed, int skipSilence) {
+        Service service = EppyBridge.getPlayerService();
+        if (service == null || !EppyBridge.has("speed")) return false;
+        final float sp = Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, speed)) * 20f) / 20f;
+        final int sk = Math.max(0, Math.min(5, skipSilence));
+        main.post(() -> {
+            try {
+                EppyBridge.setSpeed(service, sp, sk);
+            } catch (Throwable t) {
+                EppyDiag.error("speed", "set speed failed: " + t);
+            }
+            dispatchPlayback();
+        });
+        EppyDiag.log("speed", sp + "× skip " + sk);
+        return true;
+    }
+
+    /** Next speed in the cycle (favourites if set, else all presets), wrapping to the start. */
+    public float nextSpeed(float[] cycle) {
+        float cur = bookSpeed();
+        for (float f : cycle) if (f > cur + 0.001f) return f;
+        return cycle[0];
+    }
+
+    // ---- sleep timer (SABP's own, running in its service) ---------------------------------------
+
+    public boolean sleepActive() {
+        return SabpPrefs.sleepActive(app);
+    }
+
+    /** Countdown text from PlayerService ("9:58"), "" when not counting, null if unavailable. */
+    public String sleepRemaining() {
+        Service service = EppyBridge.getPlayerService();
+        if (service == null || !EppyBridge.has("sleepRemaining")) return null;
+        try {
+            return EppyBridge.sleepRemaining(service);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** Starts (or restarts) SABP's timer with a duration in minutes; -1 = end of chapter/file. */
+    public void startSleep(int minutes) {
+        restoreSleepDefault();
+        SabpPrefs.setSleepMinutes(app, minutes);
+        command(EppyBridge.ACTION_ENABLE_SLEEP);
+        EppyDiag.log("sleep", "start " + (minutes < 0 ? "end of chapter" : minutes + " min"));
+    }
+
+    public void stopSleep() {
+        command(EppyBridge.ACTION_DISABLE_SLEEP);
+        restoreSleepDefault();
+    }
+
+    /**
+     * Adds minutes to a running timer. SABP's timer counts its configured length from the moment
+     * it starts, so this restarts it with (time left + extra) and remembers the user's normal
+     * length, which is put back when the timer is next stopped or started.
+     */
+    public void extendSleep(int extraMinutes) {
+        String rem = sleepRemaining();
+        int leftMin = parseMinutes(rem);
+        int base = SabpPrefs.sleepMinutes(app);
+        if (leftMin < 0) leftMin = Math.max(0, base);
+        android.content.SharedPreferences p = EppyTheme.prefs(app);
+        if (!p.contains("sleepRestore")) p.edit().putInt("sleepRestore", base).apply();
+        SabpPrefs.setSleepMinutes(app, leftMin + extraMinutes);
+        command(EppyBridge.ACTION_ENABLE_SLEEP);
+        EppyDiag.log("sleep", "extend to " + (leftMin + extraMinutes) + " min");
+    }
+
+    /** Puts back the user's normal timer length after an extension, if any. */
+    public void restoreSleepDefault() {
+        android.content.SharedPreferences p = EppyTheme.prefs(app);
+        if (p.contains("sleepRestore")) {
+            SabpPrefs.setSleepMinutes(app, p.getInt("sleepRestore", 10));
+            p.edit().remove("sleepRestore").apply();
+        }
+    }
+
+    /** "12:34" → 13 (rounded up), "" or null → -1. */
+    static int parseMinutes(String mmss) {
+        if (mmss == null || mmss.isEmpty()) return -1;
+        try {
+            String[] parts = mmss.trim().split(":");
+            int secs = 0;
+            for (String part : parts) secs = secs * 60 + Integer.parseInt(part.trim());
+            return (secs + 59) / 60;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
     // ---- commands -------------------------------------------------------------------------
 
     public void playPause() {

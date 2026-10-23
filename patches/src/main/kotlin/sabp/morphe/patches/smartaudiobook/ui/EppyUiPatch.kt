@@ -44,7 +44,7 @@ private const val BOOKMARK = "$SABP/Bookmark;"
 private const val CHARACTER = "$SABP/CharacterDescription;"
 private const val SLEEP_SETTINGS = "$SABP/PlayerSettingsSleepActivity;"
 private const val SETTINGS_ACTIVITY = "$SABP/PlayerSettingsActivity;"
-const val EPPY_VERSION = "0.7.0"
+const val EPPY_VERSION = "0.8.0"
 private const val EPPY_ACTIVITY = "app.morphe.extension.sabp.EppyActivity"
 
 private fun newLauncherFilter(doc: org.w3c.dom.Document): Element =

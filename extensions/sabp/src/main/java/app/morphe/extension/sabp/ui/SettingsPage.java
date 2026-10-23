@@ -83,6 +83,28 @@ public final class SettingsPage {
         mn.setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 12));
         mini.addView(mn);
 
+        LinearLayout gest = group("Cover gestures");
+        int dts = prefs().getInt("doubleTapSeconds", 0);
+        String[] dtLabels = {"Same as rewind (" + app.morphe.extension.sabp.SabpPrefs.smallSeconds(c) + " s)", "5 s", "10 s", "15 s", "20 s", "30 s", "45 s", "60 s", "Off"};
+        int[] dtValues = {0, 5, 10, 15, 20, 30, 45, 60, -1};
+        int dtIdx = 0;
+        for (int i = 0; i < dtValues.length; i++) if (dtValues[i] == dts) dtIdx = i;
+        final int curIdx = dtIdx;
+        gest.addView(Ui.linkRow(c, t, EppyIcon.TOUCH, "Double-tap the cover to skip", dtLabels[dtIdx], v -> {
+            Sheet sh = new Sheet(host.overlayRoot(), t, "Double-tap to skip");
+            for (int i = 0; i < dtValues.length; i++) {
+                final int val = dtValues[i];
+                sh.item(i == curIdx ? EppyIcon.CHECK : 0, dtLabels[i], null, () -> {
+                    prefs().edit().putInt("doubleTapSeconds", val).apply();
+                    host.rebuild();
+                });
+            }
+            sh.show();
+        }));
+        TextView gn = Ui.text(c, t, "Left half goes back, right half forward. Keep tapping to add more.", 13, 400, t.onSurfaceVariant);
+        gn.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 12));
+        gest.addView(gn);
+
         LinearLayout motion = group("Motion and feedback");
         motion.addView(toggle("Reduce motion", "Skip transitions and shape animations", "reduceMotion", t.reduceMotion));
         motion.addView(toggle("Haptic feedback", "Vibrate lightly on taps", "haptics", t.haptics));
@@ -140,7 +162,7 @@ public final class SettingsPage {
 
         LinearLayout keys = group("Keyboard shortcuts");
         TextView k = Ui.text(c, t,
-                "Space or K  Play / pause\nJ or ←  Rewind     L or →  Fast forward\nN  Next file     P  Previous file\nB  Add bookmark     S  Sleep timer\nCtrl+F  Search     1–4  Switch tabs     Esc  Back",
+                "Space or K  Play / pause\nJ or ←  Rewind     L or →  Fast forward\nN  Next file     P  Previous file\nB  Add bookmark     S  Sleep timer on/off\n[ and ]  Slower / faster\nCtrl+F  Search     1–4  Switch tabs     Esc  Back",
                 14, 400, t.onSurfaceVariant);
         k.setLineSpacing(Ui.dp(c, 6), 1f);
         k.setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 16));
