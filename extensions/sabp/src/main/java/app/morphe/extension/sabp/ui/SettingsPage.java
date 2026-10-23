@@ -49,6 +49,9 @@ public final class SettingsPage {
         h.setGravity(Gravity.CENTER_VERTICAL);
         col.addView(h);
 
+        LinearLayout player = group("Player interface");
+        player.addView(interfaceChoice());
+
         LinearLayout look = group("Appearance");
         look.addView(label("Style"));
         look.addView(skinPicker());
@@ -84,6 +87,12 @@ public final class SettingsPage {
         sabp.addView(link(EppyIcon.QUEUE, "Book queue", "Books to play next", EppyBridge.QUEUE_ACTIVITY));
         sabp.addView(link(EppyIcon.CLASSIC, "Classic player", "The original Smart AudioBook Player screen", EppyBridge.PLAYER_ACTIVITY));
 
+        LinearLayout info = group("Book information sources");
+        bookInfo(info);
+
+        LinearLayout diag = group("Diagnostics");
+        diagnostics(diag);
+
         LinearLayout keys = group("Keyboard shortcuts");
         TextView k = Ui.text(c, t,
                 "Space or K  Play / pause\nJ or ←  Rewind     L or →  Fast forward\nN  Next file     P  Previous file\nB  Add bookmark     S  Sleep timer\nCtrl+F  Search     1–4  Switch tabs     Esc  Back",
@@ -93,17 +102,17 @@ public final class SettingsPage {
         keys.addView(k);
 
         LinearLayout credits = group("Credits and open source");
-        credit(credits, "Smart AudioBook Player", "The app this interface runs on. Playback, library, bookmarks and settings are all SABP's own. Eppy only adds a new interface on top.");
+        credit(credits, "Smart AudioBook Player", "The app this interface runs on. Playback, library, bookmarks and settings are all SABP's own. eppy only adds a new interface on top.");
         credit(credits, "Hooman's Morphe Patches · github.com/arandomhooman/hoomans-morphe-patches",
-                "GPL-3.0. Eppy is designed to be used together with Hooman's SABP patch, and it's tested on Hooman's SABP 11.7.8 build. Not affiliated with or endorsed by Hooman.");
-        credit(credits, "Morphe patches template · github.com/MorpheApp", "GPL-3.0. Project and build setup. Eppy patches are for use with Morphe and aren't made by the Morphe project.");
+                "GPL-3.0. eppy is designed to be used together with Hooman's SABP patch, and it's tested on Hooman's SABP 11.7.8 build. Not affiliated with or endorsed by Hooman.");
+        credit(credits, "Morphe patches template · github.com/MorpheApp", "GPL-3.0. Project and build setup. eppy patches are for use with Morphe and aren't made by the Morphe project.");
         credit(credits, "Outfit font · github.com/Outfitio/Outfit-Fonts", "© 2021 The Outfit Project Authors · SIL Open Font License 1.1");
         credit(credits, "Plus Jakarta Sans font · github.com/tokotype/PlusJakartaSans", "© 2020 The Plus Jakarta Sans Project Authors · SIL Open Font License 1.1");
         credit(credits, "Storyteller · gitlab.com/storyteller-platform/storyteller",
                 "MIT. Not bundled. Read along can use the narration timings (EPUB 3 Media Overlays) in \"readaloud\" EPUBs that Storyteller creates, for exact sync.");
         credit(credits, "Android speech recognition and PdfRenderer", "Built-in Android APIs. They match narration to text and read PDF text on the device. Nothing is uploaded.");
 
-        TextView about = Ui.text(c, t, "Eppy UI · patches for Smart AudioBook Player, for use with Morphe", 12, 400, t.onSurfaceVariant);
+        TextView about = Ui.text(c, t, "eppy · patches for Smart AudioBook Player, for use with Morphe", 12, 400, t.onSurfaceVariant);
         about.setGravity(Gravity.CENTER);
         about.setPadding(0, Ui.dp(c, 24), 0, 0);
         col.addView(about);
@@ -197,6 +206,197 @@ public final class SettingsPage {
         wrap.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 8));
         wrap.addView(e, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 52)));
         return wrap;
+    }
+
+    /** eppy vs the classic SABP player. The only switch between the two interfaces. */
+    private View interfaceChoice() {
+        LinearLayout box = Ui.column(c);
+        String current = app.morphe.extension.sabp.EppyRoute.playerInterface(c);
+        String[] values = {app.morphe.extension.sabp.EppyRoute.INTERFACE_EPPY, app.morphe.extension.sabp.EppyRoute.INTERFACE_CLASSIC};
+        String[] names = {"eppy", "Classic SABP player"};
+        String[] notes = {"Notification, widgets, library and voice search all open eppy.",
+                "Everything opens SABP's original player. Long-press the app icon → \"eppy\" to come back."};
+        for (int i = 0; i < 2; i++) {
+            final String v = values[i];
+            boolean sel = v.equals(current);
+            LinearLayout row = Ui.row(c);
+            row.setMinimumHeight(Ui.dp(c, 64));
+            row.setPadding(Ui.dp(c, 16), Ui.dp(c, 8), Ui.dp(c, 16), Ui.dp(c, 8));
+            android.widget.RadioButton rb = new android.widget.RadioButton(c);
+            rb.setChecked(sel);
+            rb.setClickable(false);
+            rb.setFocusable(false);
+            rb.setButtonTintList(ColorStateList.valueOf(sel ? t.primary : t.outline));
+            row.addView(rb);
+            LinearLayout texts = Ui.column(c);
+            texts.setPadding(Ui.dp(c, 8), 0, 0, 0);
+            texts.addView(Ui.label(c, t, names[i], 16, 500, t.onSurface));
+            TextView n = Ui.text(c, t, notes[i], 13, 400, t.onSurfaceVariant);
+            n.setPadding(0, Ui.dp(c, 4), 0, 0);
+            texts.addView(n);
+            row.addView(texts, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            row.setBackground(Ui.ripple(t, null, 0));
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setContentDescription(names[i] + (sel ? ", selected" : ""));
+            row.setOnClickListener(x -> {
+                if (sel) return;
+                Ui.haptic(x, t);
+                app.morphe.extension.sabp.EppyRoute.setInterface(c, v);
+                app.morphe.extension.sabp.EppyDiag.log("route", "player interface set to " + v);
+                if (app.morphe.extension.sabp.EppyRoute.INTERFACE_CLASSIC.equals(v)) {
+                    host.activity().startActivity(app.morphe.extension.sabp.EppyRoute.classicIntent(c));
+                    host.activity().finish();
+                } else {
+                    host.rebuild();
+                }
+            });
+            box.addView(row);
+        }
+        return box;
+    }
+
+    private void bookInfo(LinearLayout box) {
+        android.content.SharedPreferences ip = app.morphe.extension.sabp.info.BookInfo.prefs(c);
+        box.addView(switchRow("Online lookups", "Off by default. When on, only the title and author of the book you look up are sent to the providers you enable.",
+                app.morphe.extension.sabp.info.BookInfo.onlineEnabled(c), on -> ip.edit().putBoolean("online", on).apply()));
+        box.addView(switchRow("Look up automatically", "Fills in a book only when a provider returns one exact title match. Otherwise you choose from candidates.",
+                app.morphe.extension.sabp.info.BookInfo.automatic(c), on -> ip.edit().putBoolean("auto", on).apply()));
+        java.util.List<app.morphe.extension.sabp.info.BookInfo.Provider> order = app.morphe.extension.sabp.info.BookInfo.ordered(c);
+        for (int i = 0; i < order.size(); i++) {
+            final app.morphe.extension.sabp.info.BookInfo.Provider p = order.get(i);
+            LinearLayout item = Ui.column(c);
+            item.setPadding(0, Ui.dp(c, 4), 0, Ui.dp(c, 4));
+            item.addView(switchRow((i + 1) + ". " + p.name(), p.about(), app.morphe.extension.sabp.info.BookInfo.providerEnabled(c, p),
+                    on -> ip.edit().putBoolean("enabled:" + p.id(), on).apply()));
+            LinearLayout actions = Ui.row(c);
+            actions.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), 0);
+            if (i > 0) actions.addView(Ui.textButton(c, t, "Move up", v -> {
+                app.morphe.extension.sabp.info.BookInfo.move(c, p, -1);
+                host.rebuild();
+            }));
+            actions.addView(Ui.textButton(c, t, "Test", v -> testProvider(p)));
+            item.addView(actions);
+            if (p.needsKey()) {
+                android.widget.EditText key = new android.widget.EditText(c);
+                key.setHint(p.name() + " API key");
+                key.setText(app.morphe.extension.sabp.info.BookInfo.apiKey(c, p));
+                key.setSingleLine(true);
+                key.setTextColor(t.onSurface);
+                key.setHintTextColor(t.onSurfaceVariant);
+                key.setBackground(Ui.rounded(t.surfaceContainerHigh, Ui.dp(c, 16)));
+                key.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), 0);
+                key.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                key.setOnFocusChangeListener((v, has) -> {
+                    if (!has) ip.edit().putString("key:" + p.id(), key.getText().toString().trim()).apply();
+                });
+                LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 48));
+                kl.setMargins(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 8));
+                item.addView(key, kl);
+            }
+            box.addView(item);
+        }
+        TextView spoil = Ui.text(c, t, "Character information: spoiler protection is on. No supported provider offers verified spoiler-free character descriptions, so eppy shows none. Wikipedia/Wikidata and fan wikis were evaluated and left out because they routinely reveal plot.", 13, 400, t.onSurfaceVariant);
+        spoil.setPadding(Ui.dp(c, 16), Ui.dp(c, 8), Ui.dp(c, 16), Ui.dp(c, 8));
+        box.addView(spoil);
+        LinearLayout row = Ui.row(c);
+        row.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 8));
+        row.addView(Ui.textButton(c, t, "Clear cached information", v -> {
+            app.morphe.extension.sabp.info.BookInfo.clearCache(c);
+            android.widget.Toast.makeText(c, "Cleared", android.widget.Toast.LENGTH_SHORT).show();
+        }));
+        box.addView(row);
+    }
+
+    private void testProvider(app.morphe.extension.sabp.info.BookInfo.Provider p) {
+        android.widget.Toast.makeText(c, "Testing " + p.name() + "…", android.widget.Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String result;
+            try {
+                if (p.needsKey() && app.morphe.extension.sabp.info.BookInfo.apiKey(c, p).isEmpty()) result = "No API key entered.";
+                else result = "Works: " + p.search(c, "Pride and Prejudice", "Austen").size() + " results for a test search.";
+            } catch (Throwable e) {
+                result = "Failed: " + e.getClass().getSimpleName() + (e.getMessage() != null ? " " + e.getMessage() : "");
+            }
+            final String r = result;
+            root.post(() -> showText(p.name(), r));
+        }).start();
+    }
+
+    private View switchRow(String title, String summary, boolean value, java.util.function.Consumer<Boolean> onChange) {
+        LinearLayout row = Ui.row(c);
+        row.setMinimumHeight(Ui.dp(c, 64));
+        row.setPadding(Ui.dp(c, 16), Ui.dp(c, 8), Ui.dp(c, 16), Ui.dp(c, 8));
+        LinearLayout texts = Ui.column(c);
+        texts.addView(Ui.label(c, t, title, 16, 500, t.onSurface));
+        TextView sm = Ui.text(c, t, summary, 13, 400, t.onSurfaceVariant);
+        sm.setPadding(0, Ui.dp(c, 4), 0, 0);
+        texts.addView(sm);
+        row.addView(texts, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch sw = new Switch(c);
+        sw.setChecked(value);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        sw.setThumbTintList(new ColorStateList(states, new int[]{t.onPrimary, t.outline}));
+        sw.setTrackTintList(new ColorStateList(states, new int[]{t.primary, t.surfaceContainerHighest}));
+        sw.setContentDescription(title);
+        sw.setOnCheckedChangeListener((b, checked) -> {
+            Ui.haptic(b, t);
+            onChange.accept(checked);
+        });
+        row.addView(sw);
+        row.setOnClickListener(v -> sw.toggle());
+        row.setBackground(Ui.ripple(t, null, 0));
+        return row;
+    }
+
+    private void diagnostics(LinearLayout box) {
+        String crash = app.morphe.extension.sabp.EppyDiag.lastCrash();
+        TextView status = Ui.text(c, t, crash == null ? "No crash recorded." : "A crash was recorded: " + firstLines(crash, 3), 13, 400,
+                crash == null ? t.onSurfaceVariant : t.onSurface);
+        status.setPadding(Ui.dp(c, 16), Ui.dp(c, 8), Ui.dp(c, 16), Ui.dp(c, 8));
+        box.addView(status);
+        LinearLayout row = Ui.row(c);
+        row.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 12));
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(c);
+        hs.setHorizontalScrollBarEnabled(false);
+        hs.addView(row);
+        box.addView(hs);
+        row.addView(Ui.chip(c, t, EppyIcon.CHECK, "Run checks", false, v -> showText("eppy self-check", app.morphe.extension.sabp.EppyBridge.selfCheck(c))));
+        row.addView(Ui.space(c, 8, 1));
+        row.addView(Ui.chip(c, t, EppyIcon.LIST, "Copy log", false, v -> copy("eppy log", app.morphe.extension.sabp.EppyDiag.logText())));
+        if (crash != null) {
+            row.addView(Ui.space(c, 8, 1));
+            row.addView(Ui.chip(c, t, EppyIcon.BOOKMARK, "Copy crash report", false, v -> copy("eppy crash report", crash)));
+            row.addView(Ui.space(c, 8, 1));
+            row.addView(Ui.chip(c, t, EppyIcon.CLOSE, "Clear", false, v -> {
+                app.morphe.extension.sabp.EppyDiag.clearCrash();
+                host.rebuild();
+            }));
+        }
+    }
+
+    private static String firstLines(String s, int n) {
+        String[] lines = s.split("\n");
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < Math.min(n, lines.length); i++) b.append(i > 0 ? " · " : "").append(lines[i].trim());
+        return b.toString();
+    }
+
+    private void copy(String label, String text) {
+        android.content.ClipboardManager cm = (android.content.ClipboardManager) c.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text));
+        android.widget.Toast.makeText(c, "Copied. Paste it into your bug report.", android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    private void showText(String title, String body) {
+        Sheet sh = new Sheet(host.overlayRoot(), t, title);
+        TextView tv = Ui.text(c, t, body, 13, 400, t.onSurface);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        tv.setTextIsSelectable(true);
+        tv.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 24), Ui.dp(c, 16));
+        sh.content().addView(tv);
+        sh.item(EppyIcon.LIST, "Copy", null, () -> copy(title, body));
+        sh.show();
     }
 
     private void credit(LinearLayout box, String title, String body) {

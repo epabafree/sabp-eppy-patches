@@ -5,7 +5,6 @@ import org.json.JSONArray;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Maps audiobook time (seconds from the start of the book) to word positions in the attached text.
@@ -15,7 +14,10 @@ import java.util.Map;
  * a few anchors give a good follow-along; with none it falls back to a whole-book estimate.
  */
 public final class Alignment {
-    public static final int SRC_OVERLAY = 0, SRC_SPEECH = 1, SRC_MANUAL = 2;
+    public static final int SRC_OVERLAY = 0, SRC_SPEECH = 1, SRC_MANUAL = 2, SRC_CHAPTER = 3;
+
+    /** How trustworthy the position at a given time is. */
+    public static final int LEVEL_ESTIMATE = 0, LEVEL_APPROX = 1, LEVEL_CONFIRMED = 2, LEVEL_MANUAL = 3, LEVEL_EXACT = 4;
 
     public static final class Anchor implements Comparable<Anchor> {
         public final double seconds;
@@ -55,24 +57,61 @@ public final class Alignment {
         return anchorCount(SRC_OVERLAY) > 0;
     }
 
+    private static int rank(int source) {
+        switch (source) {
+            case SRC_OVERLAY: return 4;
+            case SRC_MANUAL: return 3;
+            case SRC_SPEECH: return 2;
+            default: return 1; // chapter (approximate)
+        }
+    }
+
     /**
-     * Adds an anchor and removes older automatic anchors that contradict it (time order and word
-     * order must agree). Manual anchors win over speech anchors; overlay anchors are never removed.
+     * Adds an anchor if it is consistent with the existing ones. Time order and word order must
+     * agree, and the implied narration speed must be plausible (0.8–6 words/s). When it conflicts
+     * with an anchor of the same or higher rank, the new one is rejected (so one bad match can't
+     * wipe out good ones). Lower-ranked conflicting anchors are dropped. Manual corrections outrank
+     * speech matches; book timings (overlays) outrank everything.
+     *
+     * @return true if added
      */
     public synchronized boolean add(Anchor a) {
         ArrayList<Anchor> drop = new ArrayList<>();
         for (Anchor o : anchors) {
-            boolean conflict = (o.seconds < a.seconds && o.word > a.word) || (o.seconds > a.seconds && o.word < a.word)
-                    || Math.abs(o.seconds - a.seconds) < 4;
+            double dt = a.seconds - o.seconds;
+            int dw = a.word - o.word;
+            boolean conflict = Math.abs(dt) < 4 && o.source == a.source
+                    || (dt > 0 && dw < 0) || (dt < 0 && dw > 0)
+                    || (Math.abs(dt) >= 20 && (Math.abs(dw) / Math.abs(dt) > 6 || Math.abs(dw) / Math.abs(dt) < 0.8));
             if (!conflict) continue;
-            if (o.source == SRC_OVERLAY) return false;
-            if (a.source == SRC_SPEECH && o.source == SRC_MANUAL && Math.abs(o.seconds - a.seconds) >= 4) return false;
+            if (rank(o.source) >= rank(a.source) && !(Math.abs(dt) < 4 && o.source == a.source && a.source != SRC_OVERLAY)) return false;
             drop.add(o);
         }
         anchors.removeAll(drop);
         anchors.add(a);
         Collections.sort(anchors);
         return true;
+    }
+
+    /** Precision of the mapping at a book time, from the closest anchors around it. */
+    public synchronized int levelAt(double t) {
+        Anchor before = null, after = null;
+        for (Anchor x : anchors) {
+            if (x.seconds <= t) before = x;
+            else { after = x; break; }
+        }
+        int best = LEVEL_ESTIMATE;
+        for (Anchor x : new Anchor[]{before, after}) {
+            if (x == null) continue;
+            double d = Math.abs(x.seconds - t);
+            int lvl;
+            if (x.source == SRC_OVERLAY) lvl = d < 120 ? LEVEL_EXACT : LEVEL_APPROX;
+            else if (x.source == SRC_MANUAL) lvl = d < 300 ? LEVEL_MANUAL : d < 1800 ? LEVEL_APPROX : LEVEL_ESTIMATE;
+            else if (x.source == SRC_SPEECH) lvl = d < 600 ? LEVEL_CONFIRMED : d < 2400 ? LEVEL_APPROX : LEVEL_ESTIMATE;
+            else lvl = d < 3600 ? LEVEL_APPROX : LEVEL_ESTIMATE;
+            best = Math.max(best, lvl);
+        }
+        return best;
     }
 
     public synchronized void clear(int source) {
@@ -145,96 +184,12 @@ public final class Alignment {
         return Math.max(0, Math.min(words - 1, w));
     }
 
-    // ---- voting matcher ---------------------------------------------------------------------
-
-    /** Result of locating a transcript in the book. */
-    public static final class Match {
-        public final int word;
-        public final float confidence;
-
-        Match(int word, float confidence) {
-            this.word = word;
-            this.confidence = confidence;
-        }
-    }
-
-    /**
-     * Finds where a short transcript occurs in the book text. Every transcript word votes for the
-     * start positions it is consistent with; rare words count more than common ones. Searching
-     * the whole book is cheap this way, so a bad estimate can't hide the right spot.
-     *
-     * @param near     expected word position, or -1 for anywhere
-     * @param radius   how far from near to look (ignored when near is -1)
-     */
-    public static Match locate(BookText text, List<String> transcript, int near, int radius) {
-        if (transcript.size() < 4 || text.wordCount() == 0) return null;
-        Map<String, int[]> pos = text.positions();
-        int n = text.wordCount();
-        int bucket = 4;
-        java.util.HashMap<Integer, float[]> votes = new java.util.HashMap<>();
-        int usable = 0;
-        for (int i = 0; i < transcript.size(); i++) {
-            int[] occ = pos.get(transcript.get(i));
-            if (occ == null) continue;
-            usable++;
-            if (occ.length > 400) continue; // "the", "and": no information
-            float weight = (float) (1.0 / Math.sqrt(occ.length));
-            for (int p : occ) {
-                int start = p - i;
-                if (near >= 0 && Math.abs(start - near) > radius) continue;
-                int key = Math.floorDiv(start, bucket);
-                float[] v = votes.get(key);
-                if (v == null) votes.put(key, v = new float[2]);
-                v[0] += weight;
-                v[1] += 1;
-            }
-        }
-        if (usable < transcript.size() * 0.4) return null;
-        int bestKey = 0;
-        float best = 0, second = 0;
-        for (Map.Entry<Integer, float[]> e : votes.entrySet()) {
-            float s = e.getValue()[0];
-            float[] nb1 = votes.get(e.getKey() - 1), nb2 = votes.get(e.getKey() + 1);
-            if (nb1 != null) s += nb1[0] * 0.5f;
-            if (nb2 != null) s += nb2[0] * 0.5f;
-            if (s > best) {
-                second = best;
-                best = s;
-                bestKey = e.getKey();
-            } else if (s > second && Math.abs(e.getKey() - bestKey) > 3) {
-                second = s;
-            }
-        }
-        if (best <= 0) return null;
-        // Refine: exact start with most in-order hits inside the winning bucket ±bucket.
-        int from = Math.max(0, bestKey * bucket - bucket), to = Math.min(n - 1, bestKey * bucket + 2 * bucket);
-        int bestStart = from, bestHits = -1;
-        for (int s = from; s <= to; s++) {
-            int hits = 0;
-            for (int i = 0; i < transcript.size(); i++) {
-                int w = s + i;
-                if (w >= 0 && w < n && (transcript.get(i).equals(text.words[w])
-                        || (w + 1 < n && transcript.get(i).equals(text.words[w + 1]))
-                        || (w - 1 >= 0 && transcript.get(i).equals(text.words[w - 1])))) hits++;
-            }
-            if (hits > bestHits) {
-                bestHits = hits;
-                bestStart = s;
-            }
-        }
-        float hitRatio = bestHits / (float) transcript.size();
-        float distinct = second > 0 ? Math.min(1f, (best - second) / best) : 1f;
-        float confidence = hitRatio * (0.5f + 0.5f * distinct);
-        if (hitRatio < 0.45f || confidence < 0.35f) return null;
-        return new Match(bestStart, confidence);
-    }
-
     // ---- persistence --------------------------------------------------------------------------
 
     public synchronized JSONArray toJson() {
         JSONArray a = new JSONArray();
         for (Anchor x : anchors) {
-            if (x.source == SRC_OVERLAY) continue; // rebuilt from the EPUB
+            if (x.source == SRC_OVERLAY || x.source == SRC_CHAPTER) continue; // rebuilt from the document/audio
             try {
                 a.put(new JSONArray().put(x.seconds).put(x.word).put(x.source).put((double) x.confidence));
             } catch (Exception ignored) {

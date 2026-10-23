@@ -79,22 +79,23 @@ public final class EppyIcon extends Drawable {
                 f.addRoundRect(new RectF(5, 6, 7.5f, 18), 1f, 1f, Path.Direction.CW);
                 break;
             case REWIND:
-                s.addArc(new RectF(4, 5, 20, 21), -100, -250);
-                s.moveTo(12.6f, 2.6f);
-                s.lineTo(10.2f, 5.0f);
-                s.lineTo(12.6f, 7.4f);
-                s.moveTo(10, 11);
-                s.lineTo(10, 16);
-                s.addRoundRect(new RectF(12.5f, 11, 15.5f, 16), 1.5f, 1.5f, Path.Direction.CW);
+                // Circle centred on (12,12); arrow head at the top; "10"-style marks centred.
+                s.addArc(new RectF(4, 4, 20, 20), -100, -250);
+                s.moveTo(12.6f, 1.6f);
+                s.lineTo(10.2f, 4.0f);
+                s.lineTo(12.6f, 6.4f);
+                s.moveTo(9.5f, 9.5f);
+                s.lineTo(9.5f, 14.5f);
+                s.addRoundRect(new RectF(12, 9.5f, 15, 14.5f), 1.5f, 1.5f, Path.Direction.CW);
                 break;
             case FORWARD:
-                s.addArc(new RectF(4, 5, 20, 21), -80, 250);
-                s.moveTo(11.4f, 2.6f);
-                s.lineTo(13.8f, 5.0f);
-                s.lineTo(11.4f, 7.4f);
-                s.moveTo(10, 11);
-                s.lineTo(10, 16);
-                s.addRoundRect(new RectF(12.5f, 11, 15.5f, 16), 1.5f, 1.5f, Path.Direction.CW);
+                s.addArc(new RectF(4, 4, 20, 20), -80, 250);
+                s.moveTo(11.4f, 1.6f);
+                s.lineTo(13.8f, 4.0f);
+                s.lineTo(11.4f, 6.4f);
+                s.moveTo(9.5f, 9.5f);
+                s.lineTo(9.5f, 14.5f);
+                s.addRoundRect(new RectF(12, 9.5f, 15, 14.5f), 1.5f, 1.5f, Path.Direction.CW);
                 break;
             case BACK:
                 s.moveTo(19, 12);
@@ -158,16 +159,17 @@ public final class EppyIcon extends Drawable {
                 s.close();
                 break;
             case BOOKMARK_ADD:
-                s.moveTo(13, 4);
-                s.lineTo(7, 4);
-                s.lineTo(7, 20);
-                s.lineTo(12, 16);
-                s.lineTo(17, 20);
-                s.lineTo(17, 11);
-                s.moveTo(18, 2.5f);
-                s.lineTo(18, 7.5f);
-                s.moveTo(15.5f, 5);
-                s.lineTo(20.5f, 5);
+                // Same 10×16 bookmark as BOOKMARK, shifted left so bookmark + plus are centred.
+                s.moveTo(11, 4);
+                s.lineTo(5, 4);
+                s.lineTo(5, 20);
+                s.lineTo(10, 16);
+                s.lineTo(15, 20);
+                s.lineTo(15, 11);
+                s.moveTo(17, 2.5f);
+                s.lineTo(17, 7.5f);
+                s.moveTo(14.5f, 5);
+                s.lineTo(19.5f, 5);
                 break;
             case MOON: {
                 Path a = new Path();
@@ -178,9 +180,9 @@ public final class EppyIcon extends Drawable {
                 break;
             }
             case SPEED:
-                s.addArc(new RectF(4, 5, 20, 21), 150, 240);
-                s.moveTo(12, 13);
-                s.lineTo(16, 9);
+                s.addArc(new RectF(4, 6, 20, 22), 150, 240);
+                s.moveTo(12, 14);
+                s.lineTo(16, 10);
                 break;
             case MORE:
                 f.addCircle(12, 5.5f, 1.8f, Path.Direction.CW);

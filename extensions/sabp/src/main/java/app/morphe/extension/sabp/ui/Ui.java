@@ -57,7 +57,19 @@ public final class Ui {
         tv.setTypeface(EppyTheme.font(c, weight));
         tv.setTextColor(color);
         tv.setIncludeFontPadding(false);
-        tv.setLineSpacing(0, 1.12f);
+        // No line-spacing multiplier here: Android adds it below the last line too, which pushed
+        // every single-line label above the centre of its icon/container (v0.3.0 misalignment).
+        // Multi-line body text sets its own spacing.
+        return tv;
+    }
+
+    /** Single-line label, vertically centred in its box: the building block of buttons, chips, tabs. */
+    public static TextView label(Context c, EppyTheme t, String s, float sp, int weight, int color) {
+        TextView tv = text(c, t, s, sp, weight, color);
+        tv.setMaxLines(1);
+        tv.setSingleLine(true);
+        tv.setEllipsize(TextUtils.TruncateAt.END);
+        tv.setGravity(Gravity.CENTER_VERTICAL);
         return tv;
     }
 
@@ -113,29 +125,46 @@ public final class Ui {
         return f;
     }
 
-    /** A Material 3 assist/filter chip: 32dp tall pill, optional leading icon, 48dp touch height. */
+    /** A Material 3 chip: 40dp tall pill, optional 18dp leading icon. */
     public static LinearLayout chip(Context c, EppyTheme t, int icon, String label, boolean selected, View.OnClickListener click) {
+        return chip(c, t, icon, label, selected, null, click);
+    }
+
+    /**
+     * Chip with stable geometry: the icon never changes size, the selected state only changes
+     * colours, and {@code reserveLabel} (e.g. "Remove bookmark") reserves the width of the longest
+     * label this chip can show, so toggling it doesn't shift its neighbours.
+     */
+    public static LinearLayout chip(Context c, EppyTheme t, int icon, String label, boolean selected, String reserveLabel,
+                                    View.OnClickListener click) {
         LinearLayout chip = new LinearLayout(c);
         chip.setOrientation(LinearLayout.HORIZONTAL);
-        chip.setGravity(Gravity.CENTER_VERTICAL);
-        int h = dp(c, 40);
-        chip.setMinimumHeight(h);
+        chip.setGravity(Gravity.CENTER);
+        chip.setMinimumHeight(dp(c, 40));
         chip.setPadding(dp(c, icon != 0 ? 12 : 16), 0, dp(c, 16), 0);
         int fill = selected ? t.secondaryContainer : t.surfaceContainerHigh;
         int fg = selected ? t.onSecondaryContainer : t.onSurface;
         chip.setBackground(ripple(t, rounded(fill, dp(c, 20)), dp(c, 20)));
         if (icon != 0) {
             ImageView iv = new ImageView(c);
-            iv.setImageDrawable(new EppyIcon(selected ? EppyIcon.CHECK : icon, fg));
+            iv.setImageDrawable(new EppyIcon(icon, fg));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(c, 18), dp(c, 18));
             lp.rightMargin = dp(c, 8);
+            lp.gravity = Gravity.CENTER_VERTICAL;
             chip.addView(iv, lp);
         }
-        TextView tv = text(c, t, label, 14, 500, fg);
-        chip.addView(tv);
+        TextView tv = label(c, t, label, 14, 500, fg);
+        if (reserveLabel != null) {
+            android.graphics.Paint p = new android.graphics.Paint();
+            p.setTypeface(tv.getTypeface());
+            p.setTextSize(tv.getTextSize());
+            tv.setMinWidth((int) Math.ceil(Math.max(p.measureText(reserveLabel), p.measureText(label))));
+        }
+        LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(c, 40));
+        chip.addView(tv, tl);
         chip.setClickable(true);
         chip.setFocusable(true);
-        chip.setContentDescription(label);
+        chip.setContentDescription(label + (selected ? ", on" : ""));
         chip.setOnClickListener(v -> {
             haptic(v, t);
             if (click != null) click.onClick(v);
@@ -184,6 +213,35 @@ public final class Ui {
         if (h > 0) return h + " h " + m + " min";
         if (m > 0) return m + " min";
         return Math.max(0, seconds) + " s";
+    }
+
+    /** Filled pill button (48dp tall), shared by every screen. */
+    public static TextView filledButton(Context c, EppyTheme t, String label, View.OnClickListener l) {
+        TextView b = label(c, t, label, 15, 600, t.onPrimary);
+        b.setGravity(Gravity.CENTER);
+        b.setMinHeight(dp(c, 48));
+        b.setPadding(dp(c, 24), 0, dp(c, 24), 0);
+        b.setBackground(ripple(t, rounded(t.primary, dp(c, 24)), dp(c, 24)));
+        b.setClickable(true);
+        b.setFocusable(true);
+        b.setOnClickListener(v -> {
+            haptic(v, t);
+            l.onClick(v);
+        });
+        return b;
+    }
+
+    /** Text button (48dp tall). */
+    public static TextView textButton(Context c, EppyTheme t, String label, View.OnClickListener l) {
+        TextView b = label(c, t, label, 15, 600, t.primary);
+        b.setGravity(Gravity.CENTER);
+        b.setMinHeight(dp(c, 48));
+        b.setPadding(dp(c, 16), 0, dp(c, 16), 0);
+        b.setBackground(ripple(t, null, dp(c, 24)));
+        b.setClickable(true);
+        b.setFocusable(true);
+        b.setOnClickListener(l);
+        return b;
     }
 
     public static LinearLayout.LayoutParams lp(int w, int h) {

@@ -94,7 +94,13 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        EppyDiag.ensure(this);
+        // "Player interface: Classic SABP" was chosen: hand over to the classic player.
+        if (EppyRoute.redirectToClassicIfChosen(this)) return;
         player = EppyPlayer.get(this);
+        if (state == null) EppyRoute.handleSearch(this, getIntent());
+        if (state != null) pendingSheetTab = state.getInt("sheetTab", -1);
+        else pendingSheetTab = getIntent() != null ? getIntent().getIntExtra(EppyRoute.EXTRA_SHEET_TAB, -1) : -1;
         if (state != null) {
             tab = state.getInt("tab", TAB_HOME);
             playerOpen = state.getBoolean("playerOpen", false);
@@ -113,7 +119,23 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (intent != null && intent.getBooleanExtra("openPlayer", false)) openPlayer();
+        setIntent(intent);
+        if (intent == null) return;
+        EppyDiag.log("route", "eppy reopened (openPlayer=" + intent.getBooleanExtra(EppyRoute.EXTRA_OPEN_PLAYER, false) + ")");
+        EppyRoute.handleSearch(this, intent);
+        if (intent.getBooleanExtra(EppyRoute.EXTRA_OPEN_PLAYER, false)) openPlayer();
+        int tabExtra = intent.getIntExtra(EppyRoute.EXTRA_SHEET_TAB, -1);
+        if (tabExtra >= 0) showPlayerSheet(tabExtra);
+    }
+
+    private int pendingSheetTab = -1;
+
+    private void showPlayerSheet(int tabIndex) {
+        if (sidePane != null) sidePane.showSheet(tabIndex);
+        else {
+            openPlayer();
+            if (overlayPane != null) overlayPane.showSheet(tabIndex);
+        }
     }
 
     @Override
@@ -121,6 +143,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         super.onSaveInstanceState(out);
         out.putInt("tab", tab);
         out.putBoolean("playerOpen", playerOpen);
+        int sheetTab = overlayPane != null ? overlayPane.openSheetTab() : sidePane != null ? sidePane.openSheetTab() : -1;
+        out.putInt("sheetTab", sheetTab);
     }
 
     @Override
@@ -286,6 +310,11 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
             openPlayer(false);
         }
         refreshAll(true);
+        if (pendingSheetTab >= 0) {
+            final int tabToOpen = pendingSheetTab;
+            pendingSheetTab = -1;
+            root.post(() -> showPlayerSheet(tabToOpen));
+        }
     }
 
     private void applySystemBars() {
@@ -337,7 +366,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         iv.setImageDrawable(new EppyIcon(TAB_ICONS[index], sel ? theme.onSecondaryContainer : theme.onSurfaceVariant));
         pill.addView(iv, new FrameLayout.LayoutParams(Ui.dp(this, 24), Ui.dp(this, 24), Gravity.CENTER));
         item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(this, rail ? 56 : 64), Ui.dp(this, 32)));
-        TextView label = Ui.text(this, theme, TAB_LABELS[index], 12, sel ? 700 : 500, sel ? theme.onSurface : theme.onSurfaceVariant);
+        TextView label = Ui.label(this, theme, TAB_LABELS[index], 12, 600, sel ? theme.onSurface : theme.onSurfaceVariant);
         label.setPadding(0, Ui.dp(this, 4), 0, 0);
         item.addView(label);
         item.setClickable(true);
@@ -483,7 +512,6 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
                 ReadAlong ra = ReadAlong.get(this);
                 ra.openBook(b.folderUri);
                 ra.pair(data.getData());
-                if (ra.speechSupported() && !ra.speechPermitted()) ensureSpeechPermission(ra::retryTracking);
                 if (overlayPane != null) overlayPane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
                 else if (sidePane != null) sidePane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
             }
@@ -637,7 +665,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     @Override
     public void openSabp(String activityClass) {
         try {
-            Intent i = EppyBridge.activityIntent(this, activityClass);
+            // The classic player only ever opens on purpose, marked so the router lets it through.
+            Intent i = EppyBridge.PLAYER_ACTIVITY.equals(activityClass) ? EppyRoute.classicIntent(this)
+                    : EppyBridge.activityIntent(this, activityClass);
+            EppyDiag.log("route", "opening " + activityClass.substring(activityClass.lastIndexOf('.') + 1));
             startActivity(i);
         } catch (ActivityNotFoundException | SecurityException e) {
             Toast.makeText(this, "Not available in this version", Toast.LENGTH_SHORT).show();

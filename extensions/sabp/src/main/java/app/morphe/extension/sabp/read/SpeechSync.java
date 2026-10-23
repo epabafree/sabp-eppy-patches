@@ -39,6 +39,10 @@ public final class SpeechSync {
     private final Context c;
     private final Handler main = new Handler(Looper.getMainLooper());
     private boolean busy;
+    private SpeechRecognizer active;
+    private ParcelFileDescriptor[] activePipe;
+    private Runnable activeTimeout;
+    private Callback activeCallback;
 
     public SpeechSync(Context c) {
         this.c = c.getApplicationContext();
@@ -57,6 +61,46 @@ public final class SpeechSync {
     @android.annotation.TargetApi(33)
     private static boolean onDevice(Context c) {
         return SpeechRecognizer.isOnDeviceRecognitionAvailable(c);
+    }
+
+    /** Stops the current session (if any) and releases the recogniser, pipe and decoder. */
+    public void cancel() {
+        if (!busy) return;
+        main.post(() -> {
+            if (activeCallback != null) {
+                Callback cb = activeCallback;
+                activeCallback = null;
+                release();
+                busy = false;
+                app.morphe.extension.sabp.EppyDiag.jobEnd("readalong: recognising speech", "cancelled");
+                cb.onError("Stopped.");
+            }
+        });
+    }
+
+    private void release() {
+        if (activeTimeout != null) main.removeCallbacks(activeTimeout);
+        activeTimeout = null;
+        if (active != null) {
+            try {
+                active.cancel();
+            } catch (Throwable ignored) {
+            }
+            try {
+                active.destroy();
+            } catch (Throwable ignored) {
+            }
+        }
+        active = null;
+        if (activePipe != null) {
+            for (ParcelFileDescriptor p : activePipe) {
+                try {
+                    p.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        activePipe = null;
     }
 
     public boolean isBusy() {
@@ -85,10 +129,14 @@ public final class SpeechSync {
         busy = true;
         new Thread(() -> {
             short[] pcm;
+            app.morphe.extension.sabp.EppyDiag.jobStart("readalong: decoding audio");
             try {
                 pcm = decode(audio, start, length);
+                app.morphe.extension.sabp.EppyDiag.jobEnd("readalong: decoding audio", (pcm != null ? pcm.length / RATE : 0) + " s of audio");
             } catch (Throwable t) {
-                finish(cb, null, "Couldn't decode audio: " + t.getMessage());
+                app.morphe.extension.sabp.EppyDiag.jobEnd("readalong: decoding audio", t.toString());
+                finish(cb, null, t instanceof OutOfMemoryError ? "Low memory while decoding audio."
+                        : "Couldn't decode this part of the audiobook (" + t.getClass().getSimpleName() + ").");
                 return;
             }
             if (pcm == null || pcm.length < RATE * 2) {
@@ -109,26 +157,22 @@ public final class SpeechSync {
 
     @android.annotation.TargetApi(33)
     private void recognize(short[] pcm, String language, Callback cb) {
-        final SpeechRecognizer sr;
-        final ParcelFileDescriptor[] pipe;
+        app.morphe.extension.sabp.EppyDiag.jobStart("readalong: recognising speech");
         try {
-            sr = SpeechRecognizer.createOnDeviceSpeechRecognizer(c);
-            pipe = ParcelFileDescriptor.createPipe();
+            active = SpeechRecognizer.createOnDeviceSpeechRecognizer(c);
+            // Both ends stay open until the session ends: the recogniser reads the read end
+            // after SpeechRecognizer posts the request to its own handler. Closing it early made
+            // every request fail with ERROR_CLIENT in v0.3.0.
+            activePipe = ParcelFileDescriptor.createPipe();
         } catch (Throwable t) {
-            finish(cb, null, "Speech recogniser unavailable");
+            release();
+            app.morphe.extension.sabp.EppyDiag.jobEnd("readalong: recognising speech", t.toString());
+            finish(cb, null, "Speech recognition unavailable: the on-device recogniser couldn't be started.");
             return;
         }
-        final boolean[] done = {false};
-        Runnable timeout = () -> {
-            if (!done[0]) {
-                done[0] = true;
-                try {
-                    sr.destroy();
-                } catch (Throwable ignored) {
-                }
-                finish(cb, null, "Speech recogniser timed out");
-            }
-        };
+        activeCallback = cb;
+        final SpeechRecognizer sr = active;
+        activeTimeout = () -> done(sr, null, "Speech recognition timed out.");
         sr.setRecognitionListener(new RecognitionListener() {
             public void onReadyForSpeech(Bundle b) {
             }
@@ -146,27 +190,22 @@ public final class SpeechSync {
             }
 
             public void onError(int error) {
-                if (done[0]) return;
-                done[0] = true;
-                main.removeCallbacks(timeout);
-                sr.destroy();
-                finish(cb, null, errorText(error));
+                done(sr, null, errorText(error));
             }
 
             public void onResults(Bundle results) {
-                if (done[0]) return;
-                done[0] = true;
-                main.removeCallbacks(timeout);
-                sr.destroy();
-                ArrayList<String> list = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 ArrayList<String> words = new ArrayList<>();
-                if (list != null && !list.isEmpty()) {
-                    for (String w : list.get(0).split("\\s+")) {
-                        String n = BookText.normalize(w);
-                        if (!n.isEmpty()) words.add(n);
+                try {
+                    ArrayList<String> list = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (list != null && !list.isEmpty()) {
+                        for (String w : list.get(0).split("\\s+")) {
+                            String n = BookText.normalize(w);
+                            if (!n.isEmpty()) words.add(n);
+                        }
                     }
+                } catch (Throwable ignored) {
                 }
-                finish(cb, words, null);
+                done(sr, words, null);
             }
 
             public void onPartialResults(Bundle b) {
@@ -180,7 +219,7 @@ public final class SpeechSync {
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         if (language != null && !language.isEmpty()) intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language);
         intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
-        intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, pipe[0]);
+        intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, activePipe[0]);
         intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1);
         intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT);
         intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, RATE);
@@ -188,24 +227,39 @@ public final class SpeechSync {
         try {
             sr.startListening(intent);
         } catch (Throwable t) {
-            done[0] = true;
-            sr.destroy();
-            finish(cb, null, "Speech recogniser refused the request");
+            done(sr, null, "The speech recogniser refused the request (" + t.getClass().getSimpleName() + ").");
             return;
         }
-        try {
-            pipe[0].close(); // the recogniser holds its own copy
-        } catch (Throwable ignored) {
-        }
+        final ParcelFileDescriptor writeEnd = activePipe[1];
         new Thread(() -> {
-            try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
-                ByteBuffer bb = ByteBuffer.allocate(pcm.length * 2).order(ByteOrder.LITTLE_ENDIAN);
-                for (short s : pcm) bb.putShort(s);
-                out.write(bb.array());
+            try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(writeEnd)) {
+                byte[] chunk = new byte[8192];
+                int i = 0;
+                while (i < pcm.length) {
+                    int n = Math.min(chunk.length / 2, pcm.length - i);
+                    for (int k = 0; k < n; k++) {
+                        short v = pcm[i + k];
+                        chunk[2 * k] = (byte) v;
+                        chunk[2 * k + 1] = (byte) (v >> 8);
+                    }
+                    out.write(chunk, 0, n * 2);
+                    i += n;
+                }
             } catch (Throwable ignored) {
+                // Recogniser closed its end early (finished or cancelled): nothing to do.
             }
         }, "eppy-feed").start();
-        main.postDelayed(timeout, 30_000);
+        main.postDelayed(activeTimeout, 30_000);
+    }
+
+    /** Ends the session exactly once and releases everything. */
+    private void done(SpeechRecognizer sr, List<String> words, String error) {
+        if (sr != active || activeCallback == null) return;
+        Callback cb = activeCallback;
+        activeCallback = null;
+        release();
+        app.morphe.extension.sabp.EppyDiag.jobEnd("readalong: recognising speech", error != null ? error : words.size() + " words");
+        finish(cb, words, error);
     }
 
     private static String errorText(int e) {
@@ -214,13 +268,18 @@ public final class SpeechSync {
                 return "No speech recognised in this clip";
             case SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED:
             case SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE:
-                return "No offline speech model for this book's language";
+                return "Language model unavailable: the on-device recogniser has no model for this book's language. Download it in your phone's speech settings.";
             case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS:
-                return "The speech service needs the microphone permission";
+                return "Android's speech service refused: it requires the microphone permission even for audio files.";
             case SpeechRecognizer.ERROR_RECOGNIZER_BUSY:
                 return "Speech recogniser busy";
+            case SpeechRecognizer.ERROR_CLIENT:
+                return "The speech recogniser rejected the request (client error).";
+            case SpeechRecognizer.ERROR_SERVER_DISCONNECTED:
+            case SpeechRecognizer.ERROR_SERVER:
+                return "The speech service stopped while listening.";
             default:
-                return "Speech recogniser error " + e;
+                return "Speech recognition failed (error " + e + ").";
         }
     }
 

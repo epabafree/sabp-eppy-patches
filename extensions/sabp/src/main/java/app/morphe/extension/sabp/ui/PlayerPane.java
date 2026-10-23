@@ -215,7 +215,7 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         chipRow.removeAllViews();
         addChip(Ui.chip(c, t, EppyIcon.SPEED, formatSpeed(host.player().speed()), false,
                 v -> host.player().command(EppyBridge.ACTION_TOGGLE_SPEED)));
-        addChip(Ui.chip(c, t, EppyIcon.MOON, sleepOn ? "Sleep on" : "Sleep", sleepOn, v -> {
+        addChip(Ui.chip(c, t, EppyIcon.MOON, sleepOn ? "Sleep on" : "Sleep", sleepOn, "Sleep on", v -> {
             sleepOn = !sleepOn;
             host.player().command(sleepOn ? EppyBridge.ACTION_ENABLE_SLEEP : EppyBridge.ACTION_DISABLE_SLEEP);
             buildChips();
@@ -223,7 +223,7 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         boolean marked = isBookmarked();
         bookmarkShown = marked;
         bookmarkChip = Ui.chip(c, t, marked ? EppyIcon.BOOKMARK : EppyIcon.BOOKMARK_ADD, marked ? "Remove bookmark" : "Add bookmark", marked,
-                v -> host.bookmarkAction(0));
+                "Remove bookmark", v -> host.bookmarkAction(0));
         bookmarkChip.setOnLongClickListener(v -> {
             bookmarkOptions();
             return true;
@@ -294,6 +294,10 @@ public final class PlayerPane implements EppyBookmarks.Listener {
     /** Back press: close the sheet first. */
     public boolean onBack() {
         return sheet.onBack();
+    }
+
+    public int openSheetTab() {
+        return sheet.openTab();
     }
 
     public void showSheet(int tab) {

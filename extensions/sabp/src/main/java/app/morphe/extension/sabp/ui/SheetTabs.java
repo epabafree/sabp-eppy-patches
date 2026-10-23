@@ -403,15 +403,139 @@ public final class SheetTabs {
                 });
             }).start();
 
+            onlineSection(b, p.bookTitle() != null ? p.bookTitle() : b.folderName, text != null ? text.author : null);
+
+            TextView chars = Ui.text(c, t, "Characters", 16, 600, t.onSurface);
+            chars.setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 4));
+            col.addView(chars);
+            col.addView(source("Spoiler protection is on: no provider eppy can use offers verified spoiler-free character descriptions, so none are shown. "
+                    + "Your own notes live in SABP's Characters screen below."));
+
             TextView more = Ui.text(c, t, "More", 16, 600, t.onSurface);
             more.setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 4));
             col.addView(more);
             col.addView(link(EppyIcon.PERSON, "Characters", "Classic screen · names and notes", EppyBridge.CHARACTERS_ACTIVITY));
             col.addView(link(EppyIcon.CHART, "Listening statistics", "Classic screen", EppyBridge.STATS_ACTIVITY));
             col.addView(link(EppyIcon.HISTORY, "History", "Classic screen · undo accidental jumps", EppyBridge.HISTORY_ACTIVITY));
-            TextView note = source("Online lookup of author, narrator, series and summaries isn't built yet; it's planned as a separate optional feature.");
-            note.setPadding(0, Ui.dp(c, 20), 0, 0);
-            col.addView(note);
+        }
+
+        /** Online information: cached record, lookup with candidate review, removal. */
+        private void onlineSection(EppyBook b, String title, String author) {
+            TextView head = Ui.text(c, t, "Online information", 16, 600, t.onSurface);
+            head.setPadding(0, Ui.dp(c, 24), 0, Ui.dp(c, 8));
+            col.addView(head);
+            final String folder = b.folderUri;
+            app.morphe.extension.sabp.info.BookInfo.Record r = app.morphe.extension.sabp.info.BookInfo.cached(c, folder);
+            if (r != null) {
+                TextView tt = Ui.text(c, t, r.title + (r.subtitle != null && !r.subtitle.isEmpty() ? ": " + r.subtitle : ""), 15, 600, t.onSurface);
+                col.addView(tt);
+                String meta = (r.authors != null && !r.authors.isEmpty() ? "by " + r.authors : "") + (r.year != null && !r.year.isEmpty() ? " · " + r.year : "")
+                        + (r.isbn != null && !r.isbn.isEmpty() ? " · ISBN " + r.isbn : "");
+                if (!meta.isEmpty()) {
+                    TextView m = Ui.text(c, t, meta, 13, 400, t.onSurfaceVariant);
+                    m.setPadding(0, Ui.dp(c, 4), 0, 0);
+                    col.addView(m);
+                }
+                if (r.description != null && !r.description.isEmpty()) {
+                    TextView d = Ui.text(c, t, r.description, 14, 400, t.onSurfaceVariant);
+                    d.setLineSpacing(Ui.dp(c, 3), 1f);
+                    d.setPadding(0, Ui.dp(c, 8), 0, 0);
+                    col.addView(d);
+                }
+                if (r.subjects != null && !r.subjects.isEmpty()) {
+                    TextView sj = Ui.text(c, t, "Subjects: " + r.subjects, 12, 400, t.onSurfaceVariant);
+                    sj.setPadding(0, Ui.dp(c, 6), 0, 0);
+                    col.addView(sj);
+                }
+                col.addView(source("Source: " + r.providerName + (r.sourceUrl != null && !r.sourceUrl.isEmpty() ? " (" + r.sourceUrl + ")" : "")
+                        + ". Bibliographic data as published by the provider; not reviewed for spoilers."));
+                LinearLayout row = Ui.row(c);
+                row.addView(Ui.textButton(c, t, "Look up again", v -> lookup(folder, title, author)));
+                row.addView(Ui.textButton(c, t, "Remove", v -> {
+                    app.morphe.extension.sabp.info.BookInfo.forget(c, folder);
+                    refresh(true);
+                }));
+                col.addView(row);
+                return;
+            }
+            if (!app.morphe.extension.sabp.info.BookInfo.onlineEnabled(c)) {
+                col.addView(source("Online lookups are off. Turn them on in Settings → Book information sources (Open Library needs no account)."));
+                return;
+            }
+            col.addView(Ui.textButton(c, t, "Look up \"" + title + "\"", v -> lookup(folder, title, author)));
+            if (app.morphe.extension.sabp.info.BookInfo.automatic(c) && autoTried.add(folder)) {
+                new Thread(() -> {
+                    ArrayList<String> errors = new ArrayList<>();
+                    List<app.morphe.extension.sabp.info.BookInfo.Record> found = app.morphe.extension.sabp.info.BookInfo.searchAll(c, cleanTitle(title), author, errors);
+                    app.morphe.extension.sabp.info.BookInfo.Record only = null;
+                    int exact = 0;
+                    for (app.morphe.extension.sabp.info.BookInfo.Record cand : found) {
+                        if (app.morphe.extension.sabp.info.BookInfo.sameTitle(cand.title, cleanTitle(title))) {
+                            exact++;
+                            only = cand;
+                        }
+                    }
+                    if (exact != 1) return; // ambiguous or nothing: the user decides
+                    final app.morphe.extension.sabp.info.BookInfo.Record pick = only;
+                    try {
+                        for (app.morphe.extension.sabp.info.BookInfo.Provider pr : app.morphe.extension.sabp.info.BookInfo.PROVIDERS)
+                            if (pr.id().equals(pick.providerId)) pr.complete(c, pick);
+                    } catch (Throwable ignored) {
+                    }
+                    pick.fetchedAt = System.currentTimeMillis();
+                    app.morphe.extension.sabp.info.BookInfo.save(c, folder, pick);
+                    root.post(() -> refresh(true));
+                }, "eppy-bookinfo-auto").start();
+            }
+        }
+
+        private final java.util.Set<String> autoTried = new java.util.HashSet<>();
+
+        private void lookup(String folder, String title, String author) {
+            android.widget.Toast.makeText(c, "Looking up…", android.widget.Toast.LENGTH_SHORT).show();
+            new Thread(() -> {
+                ArrayList<String> errors = new ArrayList<>();
+                List<app.morphe.extension.sabp.info.BookInfo.Record> found = app.morphe.extension.sabp.info.BookInfo.searchAll(c, cleanTitle(title), author, errors);
+                root.post(() -> showCandidates(folder, found, errors));
+            }, "eppy-bookinfo").start();
+        }
+
+        private static String cleanTitle(String s) {
+            // Folder names often carry extras: "Author - Title (Unabridged) [2019]".
+            String x = s.replaceAll("\\(.*?\\)|\\[.*?]", " ").replaceAll("_", " ");
+            int dash = x.indexOf(" - ");
+            if (dash > 0 && dash < x.length() - 3) x = x.substring(dash + 3);
+            return x.replaceAll("\\s+", " ").trim();
+        }
+
+        private void showCandidates(String folder, List<app.morphe.extension.sabp.info.BookInfo.Record> found, List<String> errors) {
+            Sheet sh = new Sheet(host.overlayRoot(), t, found.isEmpty() ? "Nothing found" : "Which one is this book?");
+            for (String e : errors) {
+                TextView tv = Ui.text(c, t, e, 13, 400, t.onSurfaceVariant);
+                tv.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 24), Ui.dp(c, 8));
+                sh.content().addView(tv);
+            }
+            if (found.isEmpty() && errors.isEmpty()) {
+                TextView tv = Ui.text(c, t, "No provider returned a match. Try renaming the book folder to its plain title.", 13, 400, t.onSurfaceVariant);
+                tv.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 24), Ui.dp(c, 8));
+                sh.content().addView(tv);
+            }
+            for (app.morphe.extension.sabp.info.BookInfo.Record r : found) {
+                String sub = (r.authors != null && !r.authors.isEmpty() ? r.authors : "Unknown author") + (r.year != null && !r.year.isEmpty() ? " · " + r.year : "")
+                        + " · " + r.providerName;
+                sh.item(EppyIcon.LIBRARY, r.title, sub, () -> new Thread(() -> {
+                    try {
+                        for (app.morphe.extension.sabp.info.BookInfo.Provider pr : app.morphe.extension.sabp.info.BookInfo.PROVIDERS) {
+                            if (pr.id().equals(r.providerId)) pr.complete(c, r);
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                    r.fetchedAt = System.currentTimeMillis();
+                    app.morphe.extension.sabp.info.BookInfo.save(c, folder, r);
+                    root.post(() -> refresh(true));
+                }).start());
+            }
+            sh.show();
         }
 
         private TextView source(String s) {

@@ -12,7 +12,7 @@ import sabp.morphe.patches.smartaudiobook.smartAudioBookCompatibility
  * encoder, so the font ships as an asset and is applied in code.
  */
 internal val fontAssetPatch = resourcePatch(
-    description = "Bundles the Outfit and Plus Jakarta Sans fonts. Applied with the Eppy UI or Modern font patch.",
+    description = "Bundles the Outfit and Plus Jakarta Sans fonts. Applied with the eppy or Modern font patch.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
 
@@ -32,7 +32,7 @@ internal val fontAssetPatch = resourcePatch(
 val modernFontPatch = bytecodePatch(
     name = "Modern font",
     description = "Uses the rounded geometric Outfit font across the classic SABP screens (lists, " +
-        "settings, toolbars), keeping each label's weight. The Eppy UI always uses it.",
+        "settings, toolbars), keeping each label's weight. eppy always uses it.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
     dependsOn(fontAssetPatch)

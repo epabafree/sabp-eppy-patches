@@ -55,7 +55,6 @@ public final class BookText {
     public int[] wordStart = new int[0];  // char offset in that paragraph
     public int[] wordEnd = new int[0];
 
-    private Map<String, int[]> positions;
 
     public int wordCount() {
         return words.length;
@@ -100,7 +99,7 @@ public final class BookText {
             wordStart[k] = m[1];
             wordEnd[k] = m[2];
         }
-        positions = null;
+        sections = null;
     }
 
     public static String normalize(String s) {
@@ -113,23 +112,40 @@ public final class BookText {
         return b.toString();
     }
 
-    /** Word → sorted positions, for voting alignment. */
-    public Map<String, int[]> positions() {
-        if (positions != null) return positions;
-        HashMap<String, ArrayList<Integer>> tmp = new HashMap<>();
-        for (int i = 0; i < words.length; i++) {
-            ArrayList<Integer> l = tmp.get(words[i]);
-            if (l == null) tmp.put(words[i], l = new ArrayList<>());
-            l.add(i);
+    /** A document chapter/section: heading text and the first word it covers. */
+    public static final class Section {
+        public final String title;
+        public final int para;
+        public final int firstWord;
+
+        Section(String title, int para, int firstWord) {
+            this.title = title;
+            this.para = para;
+            this.firstWord = firstWord;
         }
-        HashMap<String, int[]> out = new HashMap<>(tmp.size() * 2);
-        for (Map.Entry<String, ArrayList<Integer>> e : tmp.entrySet()) {
-            ArrayList<Integer> l = e.getValue();
-            int[] a = new int[l.size()];
-            for (int i = 0; i < a.length; i++) a[i] = l.get(i);
-            out.put(e.getKey(), a);
+    }
+
+    private List<Section> sections;
+
+    private static final java.util.regex.Pattern HEADING_LIKE = java.util.regex.Pattern.compile(
+            "(?i)^(chapter|part|book|prologue|epilogue|interlude|section|act)\\b.{0,60}$|^[0-9]{1,3}\\.?$|^[ivxlcdm]{1,8}\\.?$");
+
+    /**
+     * Sections from headings (EPUB h1–h6) or, failing that, short heading-like paragraphs
+     * ("Chapter 12", "XII", "Part Two"). Used to align audio chapters coarsely and to keep each
+     * search window inside one part of the book.
+     */
+    public List<Section> sections() {
+        if (sections != null) return sections;
+        ArrayList<Section> out = new ArrayList<>();
+        boolean anyHeading = false;
+        for (Para p : paras) if (p.heading) { anyHeading = true; break; }
+        for (int i = 0; i < paras.size(); i++) {
+            Para p = paras.get(i);
+            boolean h = anyHeading ? p.heading : (p.text.length() <= 60 && HEADING_LIKE.matcher(p.text.trim()).matches());
+            if (h && p.wordCount > 0) out.add(new Section(p.text, i, p.firstWord));
         }
-        positions = out;
+        sections = out;
         return out;
     }
 
@@ -172,7 +188,7 @@ public final class BookText {
 
     public JSONObject toJson() throws Exception {
         JSONObject o = new JSONObject();
-        o.put("v", 2);
+        o.put("v", 3);
         o.put("title", title);
         o.put("language", language);
         o.put("author", author);
@@ -198,7 +214,7 @@ public final class BookText {
     }
 
     public static BookText fromJson(JSONObject o) throws Exception {
-        if (o.optInt("v") != 2) return null;
+        if (o.optInt("v") != 3 && o.optInt("v") != 2) return null;
         BookText t = new BookText();
         t.title = o.optString("title");
         t.language = o.optString("language");

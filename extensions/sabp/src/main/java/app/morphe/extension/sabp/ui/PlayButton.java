@@ -103,9 +103,9 @@ public class PlayButton extends View {
 
         int icon = Math.round(size * 0.42f);
         int left = Math.round(cx - icon / 2f), top = Math.round(cy - icon / 2f);
-        // Optical centring: the play triangle sits slightly right of centre.
-        int nudge = Math.round(size * 0.03f);
-        play.setBounds(left + nudge, top, left + nudge + icon, top + icon);
+        // The PLAY glyph is already optically centred in its 24-unit grid (triangle spans 8–19),
+        // so both glyphs use identical bounds. v0.3.0 added an extra nudge that pushed it right.
+        play.setBounds(left, top, left + icon, top + icon);
         pause.setBounds(left, top, left + icon, top + icon);
         play.setAlpha(Math.round(255 * (1f - fade)));
         pause.setAlpha(Math.round(255 * fade));

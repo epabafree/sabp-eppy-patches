@@ -18,7 +18,7 @@ import org.w3c.dom.Element
 import sabp.morphe.patches.smartaudiobook.smartAudioBookCompatibility
 import sabp.morphe.patches.smartaudiobook.theme.fontAssetPatch
 
-// The Eppy UI is a new home / library / player written as a Morphe extension
+// eppy is a new home / library / player written as a Morphe extension
 // (extensions/sabp). It does not replace SABP's engine: it drives PlayerService through the intent
 // actions SABP's own notification and widgets use, reads state from SABP's media session, and calls
 // four PlayerService methods through EppyBridge stubs that this patch fills in.
@@ -50,7 +50,7 @@ private fun newLauncherFilter(doc: org.w3c.dom.Document): Element =
     }
 
 private val eppyUiBytecodePatch = bytecodePatch(
-    description = "Connects the Eppy UI to SABP's player service. Applied with the Eppy UI patch.",
+    description = "Connects eppy to SABP's player service. Applied with the eppy patch.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
     dependsOn(fontAssetPatch)
@@ -63,6 +63,36 @@ private val eppyUiBytecodePatch = bytecodePatch(
             .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceCreated(Landroid/app/Service;)V")
         service.methods.single { it.name == "onDestroy" && it.parameterTypes.isEmpty() }
             .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceDestroyed(Landroid/app/Service;)V")
+
+        // 1b. Crash recorder + diagnostics as early as possible.
+        mutableClassDefBy("$SABP/SABPApplication;").methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
+            .addInstructions(0, "invoke-static {p0}, $EXT/EppyDiag;->install(Landroid/app/Application;)V")
+
+        // 1c. Central player routing. Every route into the classic player (notification content
+        //     intent, widgets, the library's "open book", voice search, Android restoring the task)
+        //     starts PlayerActivity, so its onCreate decides once: if the chosen player interface
+        //     is eppy (and the classic player wasn't asked for explicitly), call super.onCreate,
+        //     hand the intent to eppy and finish before any classic UI is built. Same pattern as
+        //     Morphe's YouTube settings hook (invoke-super → extension → return-void).
+        val playerActivity = mutableClassDefBy(PLAYER_ACTIVITY)
+        val onCreate = playerActivity.methods.single {
+            it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;")
+        }
+        val locals = (onCreate.implementation?.registerCount ?: 0) - 2
+        if (locals < 1) throw PatchException("Smart AudioBook Player: PlayerActivity.onCreate has no free register.")
+        onCreate.addInstructions(
+            0,
+            """
+            invoke-static {p0}, $EXT/EppyRoute;->shouldRedirect(Landroid/app/Activity;)Z
+            move-result v0
+            if-eqz v0, :eppy_classic
+            invoke-super {p0, p1}, ${playerActivity.superclass}->onCreate(Landroid/os/Bundle;)V
+            invoke-static {p0}, $EXT/EppyRoute;->redirect(Landroid/app/Activity;)V
+            return-void
+            :eppy_classic
+            nop
+            """,
+        )
 
         // 2. Resolve the library methods from the Android Auto browser service.
         val browser = classDefBy(BROWSER_SERVICE)
@@ -211,8 +241,8 @@ private val eppyUiBytecodePatch = bytecodePatch(
 
 @Suppress("unused")
 val eppyUiPatch = resourcePatch(
-    name = "Eppy UI",
-    description = "Adds a new Material 3 interface. A Home screen with Continue Listening and shelves, a " +
+    name = "eppy",
+    description = "eppy: a new Material 3 player for SABP. A Home screen with Continue Listening and shelves, a " +
         "cover-grid Library, and Now Playing with a circular play button, Add/Remove bookmark, and a " +
         "drag-up sheet: native Chapters, Read along (pair an EPUB/PDF and follow the narration), " +
         "Bookmarks, Details and Up next. Six styles based on reference designs, a floating mini-player, " +
@@ -225,9 +255,10 @@ val eppyUiPatch = resourcePatch(
     val startScreen by booleanOption(
         key = "startScreen",
         default = true,
-        title = "Open Eppy UI on launch",
-        description = "Makes the new Home screen what the app icon opens. Turn off to keep the classic " +
-            "player as the start screen and get a second \"Eppy\" launcher icon instead.",
+        title = "Use eppy as the player",
+        description = "Default player interface. On: the app icon, notification, widgets, library and voice " +
+            "search all open eppy. Off: they open the classic SABP player. Either way you can switch later in " +
+            "eppy Settings → Player interface (with Classic chosen, long-press the app icon → eppy).",
     )
     val defaultSkin by stringOption(
         key = "defaultSkin",
@@ -242,24 +273,24 @@ val eppyUiPatch = resourcePatch(
         ),
         title = "Style",
         description = "The look the app starts with, based on the reference designs. Every style can also be " +
-            "switched in Eppy Settings → Style without re-patching.",
+            "switched in eppy Settings → Style without re-patching.",
         required = false,
     )
     val speechMatching by booleanOption(
         key = "speechMatching",
-        default = true,
+        default = false,
         title = "Read-along speech matching",
         description = "Lets Read along match the narration to your EPUB/PDF with Android's on-device speech " +
             "recogniser (Android 13+). Adds the microphone permission, which Android's speech service requires " +
             "even though only the audiobook's own audio is fed to it. You are asked before it's used. Turn off " +
-            "to keep read-along to manual sync only.",
+            "to keep read-along to chapter alignment and manual sync only (no microphone permission).",
     )
     val defaultTheme by stringOption(
         key = "defaultTheme",
         default = "system",
         values = mapOf("Follow system" to "system", "Light" to "light", "Dark" to "dark", "Black (AMOLED)" to "black"),
         title = "Default theme",
-        description = "Light, dark, black or follow the system. Can be changed later in Eppy settings.",
+        description = "Light, dark, black or follow the system. Can be changed later in eppy Settings.",
         required = false,
     )
     val defaultAccent by stringOption(
@@ -268,7 +299,7 @@ val eppyUiPatch = resourcePatch(
         values = mapOf("Wallpaper (Material You)" to "wallpaper", "Book cover" to "cover", "Custom colour" to "custom"),
         title = "Default accent",
         description = "Where the accent colour comes from. \"Book cover\" picks a readable colour from the " +
-            "playing book's artwork. Can be changed later in Eppy settings.",
+            "playing book's artwork. Can be changed later in eppy Settings.",
         required = false,
     )
     val customAccent by stringOption(
@@ -300,7 +331,8 @@ val eppyUiPatch = resourcePatch(
             put("eppy_default_accent", defaultAccent ?: "wallpaper")
             put("eppy_custom_accent", customAccent ?: "#E8735A")
             put("eppy_default_skin", defaultSkin ?: "material")
-            put("eppy_speech", if (speechMatching != false) "on" else "off")
+            put("eppy_speech", if (speechMatching == true) "on" else "off")
+            put("eppy_default_interface", if (startScreen != false) "eppy" else "classic")
         }
 
         document("AndroidManifest.xml").use { doc ->
@@ -324,7 +356,8 @@ val eppyUiPatch = resourcePatch(
                 setAttribute("android:resizeableActivity", "true")
             }
 
-            // MAIN/LAUNCHER filter: move it from the classic player, or add a second icon.
+            // MAIN/LAUNCHER moves to eppy's activity; the router then opens whichever player
+            // interface is chosen, so the icon always respects the setting.
             val launcherFilter = (0 until player.childNodes.length)
                 .mapNotNull { player.childNodes.item(it) as? Element }
                 .firstOrNull { filter ->
@@ -333,20 +366,15 @@ val eppyUiPatch = resourcePatch(
                         (cats.item(it) as Element).getAttribute("android:name") == "android.intent.category.LAUNCHER"
                     }
                 }
-            if (startScreen != false) {
-                if (launcherFilter != null) {
-                    player.removeChild(launcherFilter)
-                    eppy.appendChild(launcherFilter)
-                } else {
-                    eppy.appendChild(newLauncherFilter(doc))
-                }
+            if (launcherFilter != null) {
+                player.removeChild(launcherFilter)
+                eppy.appendChild(launcherFilter)
             } else {
-                eppy.setAttribute("android:label", "Eppy")
                 eppy.appendChild(newLauncherFilter(doc))
             }
             application.appendChild(eppy)
 
-            if (speechMatching != false) {
+            if (speechMatching == true) {
                 val perms = doc.getElementsByTagName("uses-permission")
                 val has = (0 until perms.length).any {
                     (perms.item(it) as Element).getAttribute("android:name") == "android.permission.RECORD_AUDIO"

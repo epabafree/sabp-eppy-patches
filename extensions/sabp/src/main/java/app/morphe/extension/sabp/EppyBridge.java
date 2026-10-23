@@ -157,6 +157,45 @@ public final class EppyBridge {
         return false;
     }
 
+    /**
+     * Runtime check of every bridge call against the running SABP (Settings → Diagnostics).
+     * Patch-time checks only prove the methods exist; this proves they work on this device.
+     */
+    public static String selfCheck(Context c) {
+        StringBuilder b = new StringBuilder();
+        b.append("Bridge patched: ").append(isLinked() ? "yes" : "NO (patch didn't apply stubs)").append('\n');
+        Service s = getPlayerService();
+        b.append("Player service: ").append(s != null ? "running" : "not running (start a book)").append('\n');
+        if (s != null) {
+            try {
+                b.append("File position: ").append(filePositionSeconds(s)).append(" s\n");
+            } catch (Throwable t) {
+                b.append("File position: FAILED ").append(t).append('\n');
+            }
+            try {
+                Object started = Enum.valueOf((Class) Class.forName(BOOK_STATE_CLASS), "Started");
+                ArrayList<?> books = booksForState(s, started);
+                b.append("Library (in progress): ").append(books != null ? books.size() + " books" : "null").append('\n');
+            } catch (Throwable t) {
+                b.append("Library: FAILED ").append(t).append('\n');
+            }
+            try {
+                EppyBook book = EppyBook.current();
+                b.append("Book layout: ").append(book == null ? "no book loaded" : book.files.size() + " files, " + book.chapters.size()
+                        + " chapters, " + (book.total > 0 ? book.total + " s" : "length unknown")).append('\n');
+                if (book != null) {
+                    ArrayList<?> marks = loadBookmarks(c, book.folderUri);
+                    b.append("Bookmarks file: ").append(marks != null ? marks.size() + " bookmarks" : "null").append('\n');
+                }
+            } catch (Throwable t) {
+                b.append("Book/bookmarks: FAILED ").append(t).append('\n');
+            }
+        }
+        b.append("Player interface: ").append(EppyRoute.playerInterface(c)).append('\n');
+        b.append("Speech matching: ").append(app.morphe.extension.sabp.read.SpeechSync.supported(c) ? "available on this device" : "not available (needs Android 13+ and an on-device model)");
+        return b.toString();
+    }
+
     // ---- public-API helpers ---------------------------------------------------------------
 
     public static Intent serviceIntent(Context context, String action) {

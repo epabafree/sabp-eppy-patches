@@ -115,7 +115,8 @@ public final class PlayerSheet {
         for (int i = 0; i < TABS.length; i++) {
             final int idx = i;
             boolean sel = expanded && i == current;
-            TextView tv = Ui.text(c, t, TABS[i], 14, sel ? 650 : 500, sel ? t.onSecondaryContainer : t.onSurfaceVariant);
+            // Same weight selected or not: only colours change, so tabs never shift.
+            TextView tv = Ui.label(c, t, TABS[i], 14, 600, sel ? t.onSecondaryContainer : t.onSurfaceVariant);
             tv.setGravity(Gravity.CENTER);
             tv.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), 0);
             tv.setMinHeight(Ui.dp(c, 40));
@@ -242,5 +243,10 @@ public final class PlayerSheet {
 
     public int currentTab() {
         return current;
+    }
+
+    /** The open tab, or -1 when collapsed (for saving/restoring state). */
+    public int openTab() {
+        return expanded ? current : -1;
     }
 }

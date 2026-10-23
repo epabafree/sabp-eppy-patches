@@ -144,60 +144,55 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         boolean showText = text != null && s != ReadAlong.State.ERROR;
         list.setVisibility(showText ? View.VISIBLE : View.GONE);
         empty.setVisibility(showText ? View.GONE : View.VISIBLE);
-        statusBar.setVisibility(s == ReadAlong.State.NONE ? View.GONE : View.VISIBLE);
+        statusBar.setVisibility(s == ReadAlong.State.NONE && ra.interruptedNotice() == null ? View.GONE : View.VISIBLE);
         int dot;
+        String label;
+        double pos = host.player().bookPositionSeconds();
+        int level = pos >= 0 && text != null ? ra.levelAt(pos) : 0;
         switch (s) {
-            case EXACT:
-            case SYNCED:
-                dot = t.primary;
+            case WORKING:
+                dot = t.tertiary;
+                label = ra.stage();
                 break;
-            case MATCHING:
             case LOADING:
                 dot = t.tertiary;
+                label = ra.stage().isEmpty() ? "Loading" : ra.stage();
                 break;
             case ERROR:
                 dot = 0xFFE5484D;
+                label = ra.errorTitle() != null ? ra.errorTitle() : "Problem";
                 break;
             default:
-                dot = t.outline;
+                dot = level >= 2 ? t.primary : t.outline;
+                label = levelName(level);
         }
         android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
         d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         d.setColor(dot);
         statusDot.setBackground(d);
-        String label;
-        switch (s) {
-            case EXACT:
-                label = "Exact sync";
-                break;
-            case SYNCED:
-                label = "Matched";
-                break;
-            case MATCHING:
-                label = "Matching…";
-                break;
-            case LOADING:
-                label = "Loading";
-                break;
-            case ERROR:
-                label = "Problem";
-                break;
-            default:
-                label = "Estimated";
-        }
-        statusText.setText(label + (ra.message().isEmpty() ? "" : " · " + ra.message()));
+        String msg = ra.interruptedNotice() != null ? ra.interruptedNotice() : ra.message();
+        statusText.setText(label + (msg.isEmpty() ? "" : " · " + msg));
+        statusText.setMaxLines(4);
         statusText.setContentDescription("Read along status: " + statusText.getText());
 
         actions.removeAllViews();
-        if (showText && !text.pagesOnly && s != ReadAlong.State.EXACT) {
-            actions.addView(Ui.chip(c, t, EppyIcon.HEADPHONES, s == ReadAlong.State.MATCHING ? "Matching…" : "Match now", false,
+        if (s == ReadAlong.State.WORKING || s == ReadAlong.State.LOADING) {
+            addAction(Ui.chip(c, t, EppyIcon.CLOSE, "Stop", false, v -> ra.cancel()));
+        }
+        if (ra.interruptedNotice() != null) {
+            addAction(Ui.chip(c, t, EppyIcon.CHECK, "OK", false, v -> ra.dismissInterruptedNotice()));
+            addAction(Ui.chip(c, t, EppyIcon.HISTORY, "Rebuild", false, v -> {
+                ra.dismissInterruptedNotice();
+                ra.rebuild();
+            }));
+        }
+        if (showText && !text.pagesOnly && !ra.alignment().hasOverlay() && s == ReadAlong.State.READY && ra.speechSupported()) {
+            addAction(Ui.chip(c, t, EppyIcon.HEADPHONES, "Match by listening", false,
                     v -> host.ensureSpeechPermission(() -> ra.matchNow(host.player().bookPositionSeconds()))));
-            actions.addView(Ui.space(c, 8, 1));
         }
         if (showText) {
-            actions.addView(Ui.chip(c, t, 0, "A–", false, v -> setSize(textSp - 2)));
-            actions.addView(Ui.space(c, 8, 1));
-            actions.addView(Ui.chip(c, t, 0, "A+", false, v -> setSize(textSp + 2)));
+            addAction(Ui.chip(c, t, 0, "A–", false, v -> setSize(textSp - 2)));
+            addAction(Ui.chip(c, t, 0, "A+", false, v -> setSize(textSp + 2)));
         }
 
         empty.removeAllViews();
@@ -205,29 +200,54 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
             ImageView iv = new ImageView(c);
             iv.setImageDrawable(new EppyIcon(EppyIcon.LIBRARY, t.primary));
             empty.addView(iv, new LinearLayout.LayoutParams(Ui.dp(c, 48), Ui.dp(c, 48)));
-            TextView h = Ui.text(c, t, s == ReadAlong.State.ERROR ? "Couldn't use that file" : "Read along with the book", 19, 650, t.onSurface);
+            boolean err = s == ReadAlong.State.ERROR;
+            TextView h = Ui.text(c, t, err ? (ra.errorTitle() != null ? ra.errorTitle() : "Couldn't use that file")
+                    : s == ReadAlong.State.LOADING ? ra.stage() : "Read along with the book", 19, 650, t.onSurface);
             h.setGravity(Gravity.CENTER);
             h.setPadding(0, Ui.dp(c, 16), 0, Ui.dp(c, 8));
             empty.addView(h);
-            TextView p = Ui.text(c, t, s == ReadAlong.State.ERROR ? ra.message()
-                    : s == ReadAlong.State.LOADING ? ra.message()
-                    : "Pair an EPUB or PDF of this book. Eppy reads the text on your phone and matches it to the narration by listening to a few short clips with Android's offline speech recogniser. Nothing is uploaded.",
+            TextView p = Ui.text(c, t, err || s == ReadAlong.State.LOADING ? ra.message()
+                    : "Pair an EPUB or PDF of this book. eppy reads it on your phone, lines its chapters up with the audiobook's chapters, and follows along. You can correct the position by long-pressing a paragraph. Optional: match by listening to short clips with Android's on-device speech recogniser. Nothing is uploaded.",
                     14, 400, t.onSurfaceVariant);
             p.setGravity(Gravity.CENTER);
             p.setLineSpacing(Ui.dp(c, 3), 1f);
             empty.addView(p);
             if (s != ReadAlong.State.LOADING) {
-                TextView btn = Ui.text(c, t, s == ReadAlong.State.ERROR ? "Choose another file" : "Choose EPUB or PDF", 15, 600, t.onPrimary);
-                btn.setGravity(Gravity.CENTER);
-                btn.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 24), 0);
-                btn.setBackground(Ui.ripple(t, Ui.rounded(t.primary, Ui.dp(c, 24)), Ui.dp(c, 24)));
-                btn.setOnClickListener(v -> host.pickDocument());
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(c, 48));
+                LinearLayout buttons = Ui.row(c);
+                buttons.setGravity(Gravity.CENTER);
+                buttons.addView(Ui.filledButton(c, t, err ? "Choose another file" : "Choose EPUB or PDF", v -> host.pickDocument()));
+                if (err && ra.hasDocument()) {
+                    buttons.addView(Ui.space(c, 8, 1));
+                    buttons.addView(Ui.textButton(c, t, "Retry", v -> ra.rebuild()));
+                    buttons.addView(Ui.textButton(c, t, "Remove pairing", v -> ra.unpair()));
+                }
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 lp.topMargin = Ui.dp(c, 20);
-                empty.addView(btn, lp);
+                empty.addView(buttons, lp);
             }
         }
         refresh(false);
+    }
+
+    private void addAction(View chip) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = Ui.dp(c, 8);
+        actions.addView(chip, lp);
+    }
+
+    static String levelName(int level) {
+        switch (level) {
+            case 4:
+                return "Exact";
+            case 3:
+                return "Manually corrected";
+            case 2:
+                return "Confirmed by listening";
+            case 1:
+                return "Approximate";
+            default:
+                return "Estimated";
+        }
     }
 
     private void setSize(float sp) {
@@ -284,9 +304,10 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         if (row instanceof TextView) bindText((TextView) row, para);
     }
 
+    /** Sentence highlighting only where the position is confirmed, manual or exact. */
     private boolean precise() {
-        ReadAlong.State s = ra.state();
-        return s == ReadAlong.State.EXACT || s == ReadAlong.State.SYNCED;
+        double pos = host.player().bookPositionSeconds();
+        return pos >= 0 && ra.levelAt(pos) >= 2;
     }
 
     private void bindText(TextView tv, int pos) {
@@ -342,7 +363,9 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         new Sheet(host.overlayRoot(), t, null)
                 .item(EppyIcon.CHECK, "I'm hearing this now", "Corrects the sync to this " + (text.pagesOnly ? "page" : "paragraph"), () -> {
                     int u = text.pagesOnly ? pos : text.paras.get(pos).firstWord;
-                    ra.syncHere(u, host.player().bookPositionSeconds());
+                    if (!ra.syncHere(u, host.player().bookPositionSeconds())) {
+                        Toast.makeText(c, "Not saved: this conflicts with the book's exact timings.", Toast.LENGTH_SHORT).show();
+                    }
                     unit = -1;
                     refresh(false);
                 })
@@ -351,15 +374,20 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
     }
 
     private void options() {
-        Sheet s = new Sheet(host.overlayRoot(), t, ra.docName());
-        s.item(EppyIcon.FOLDER, "Pair a different file", null, host::pickDocument);
+        Sheet sh = new Sheet(host.overlayRoot(), t, ra.docName());
+        sh.item(EppyIcon.FOLDER, "Pair a different file", null, host::pickDocument);
         if (ra.speechSupported()) {
-            s.item(EppyIcon.HEADPHONES, ra.autoSyncEnabled() ? "Turn off automatic matching" : "Turn on automatic matching",
-                    "Listens to a 12-second clip about every 90 s while playing, on-device", () -> ra.setAutoSync(!ra.autoSyncEnabled()));
+            sh.item(EppyIcon.HEADPHONES, ra.autoSyncEnabled() ? "Turn off automatic matching" : "Turn on automatic matching",
+                    "Every ~2 min of playback, listens to a 10 s clip of the audiobook file with Android's on-device recogniser. Requires the microphone permission (Android's rule for its speech service). The mic itself isn't used.",
+                    () -> {
+                        if (ra.autoSyncEnabled()) ra.setAutoSync(false);
+                        else host.ensureSpeechPermission(() -> ra.setAutoSync(true));
+                    });
         }
-        s.item(EppyIcon.HISTORY, "Forget matches", "Keep the file, start syncing again", ra::clearMatches);
-        s.item(EppyIcon.CLOSE, "Unpair file", "Removes the link; the file itself is untouched", ra::unpair);
-        s.show();
+        sh.item(EppyIcon.HISTORY, "Forget matches", "Keeps the file and chapter alignment; removes listening matches and manual corrections", ra::clearMatches);
+        sh.item(EppyIcon.LIST, "Rebuild from scratch", "Re-reads the document and aligns again", ra::rebuild);
+        sh.item(EppyIcon.CLOSE, "Remove pairing", "Removes the link and cached text. The audiobook and the file are untouched", ra::unpair);
+        sh.show();
     }
 
     private final BaseAdapter adapter = new BaseAdapter() {
