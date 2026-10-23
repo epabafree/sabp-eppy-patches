@@ -129,7 +129,10 @@ class SheetTest {
         assertEquals("Back when collapsed is not consumed", false, sheet.onBack())
         // Each tab keeps its scroll position.
         sheet.show(3)
+        root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, root.width, root.height)
         lists[3].scrollTo(0, 500)
+        assertEquals("precondition: list scrolled", 500, lists[3].scrollY)
         sheet.show(0)
         sheet.show(3)
         root.measure(View.MeasureSpec.makeMeasureSpec(root.width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY))
