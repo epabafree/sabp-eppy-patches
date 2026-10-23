@@ -1,5 +1,20 @@
 # Release notes
 
+## v0.7.0: v2 spec round D (player sheet)
+
+- **Real draggable sheet** with three resting states: collapsed (tab strip peeking), half and fully open.
+  Drag from the handle, the tab strip or any non-scrolling part; flings move one state in their
+  direction, slow releases snap to the nearest. Tap the handle or the new chevron to toggle.
+- **Nested scrolling:** dragging up on a half sheet opens it first, then the list scrolls; dragging down
+  scrolls the list until it's at the top, then moves the sheet.
+- **Swipe sideways** on the sheet content to change tab (not near the screen edges, which belong to the
+  system back gesture). Each tab keeps its scroll position.
+- **Back collapses the sheet**; on Android 14+ the predictive back gesture previews the collapse.
+  Sheet state (tab and half/full) survives rotation. TalkBack gets Expand/Collapse actions.
+- **Gesture tests in CI:** the sheet is driven with real touch events (drag, fling, nested scroll, tab
+  swipe, Back, scroll memory) and must settle in the right state.
+
+
 ## v0.6.0: v2 spec rounds B and C (layout foundation, settings, library)
 
 ### Layout
