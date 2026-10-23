@@ -1039,8 +1039,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
 
     private void tickMini() {
         if (miniPlayer == null || miniPlayer.getVisibility() != View.VISIBLE) return;
-        long d = player.durationMs();
-        miniProgress.setScaleX(d > 0 ? player.positionMs() / (float) d : 0f);
+        long[] ch = player.chapterProgressMs();
+        long d = ch != null ? ch[1] : player.durationMs();
+        long pos = ch != null ? ch[0] : player.positionMs();
+        miniProgress.setScaleX(d > 0 ? pos / (float) d : 0f);
     }
 
     private void tick() {

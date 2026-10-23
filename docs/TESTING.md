@@ -69,3 +69,18 @@ change, and publishes images, test XML and the Gradle log to the `ui-results` br
 
 These are real layout and touch checks, but on layoutlib, not a phone: they don't replace the device
 checklist (spec section 18), which still hasn't been run by the developer.
+
+## Device session 1 (2026-10-24, Xiaomi 24129PN74I, Android 16 / API 36, SABP 11.7.8 Hooman build, eppy 0.7.0)
+
+Driven by the developer through scrcpy on the user's phone.
+
+| Check | Result |
+|---|---|
+| eppy opens from the SABP icon, Library tab with filters/sort | pass |
+| Mini-player sits above the bottom bar; Settings scrolls fully clear of it | pass |
+| Diagnostics opens from Settings and by tapping the version line 5 times | pass |
+| All 16 patch hooks found; runtime check: service running, position, library, book layout (1 file, 113 chapters), bookmarks file | pass |
+| Player sheet: drag from tab strip rests half open; drag up expands; list then scrolls (nested) | pass |
+| Back collapses the sheet | pass |
+| Player title / chapter line | **fail** → fixed in 0.8.1 (author shown as title) |
+| Seek bar on a 33 h single-file book | **fail** → fixed in 0.8.1 (now per chapter) |
