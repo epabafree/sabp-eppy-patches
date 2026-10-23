@@ -42,4 +42,10 @@ public interface Host {
 
     /** Explains and requests the permission Android's speech service needs, then runs action. */
     void ensureSpeechPermission(Runnable action);
+
+    /** Pushes a native screen (see {@link Pages}) onto the back stack over the current tab. */
+    void pushPage(String key, String arg);
+
+    /** Removes the top screen; Back does the same. */
+    void popPage();
 }

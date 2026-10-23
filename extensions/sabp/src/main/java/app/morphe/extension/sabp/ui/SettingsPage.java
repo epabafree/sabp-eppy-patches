@@ -90,8 +90,9 @@ public final class SettingsPage {
         LinearLayout info = group("Book information sources");
         bookInfo(info);
 
-        LinearLayout diag = group("Diagnostics");
-        diagnostics(diag);
+        LinearLayout diag = group("Help and bug reports");
+        diag.addView(Ui.linkRow(c, t, EppyIcon.CHECK, "Diagnostics", "Hooks, feature switches, storage, errors and an exportable log",
+                v -> host.pushPage(DiagnosticsPage.KEY, null)));
 
         LinearLayout keys = group("Keyboard shortcuts");
         TextView k = Ui.text(c, t,
@@ -114,6 +115,14 @@ public final class SettingsPage {
 
         TextView about = Ui.text(c, t, "eppy · patches for Smart AudioBook Player, for use with Morphe", 12, 400, t.onSurfaceVariant);
         about.setGravity(Gravity.CENTER);
+        about.setText("eppy " + EppyTheme.configString(c, "eppy_version", "") + " · patches for Smart AudioBook Player, for use with Morphe");
+        final int[] taps = {0};
+        about.setOnClickListener(v -> {
+            if (++taps[0] >= 5) {
+                taps[0] = 0;
+                host.pushPage(DiagnosticsPage.KEY, null);
+            }
+        });
         about.setPadding(0, Ui.dp(c, 24), 0, 0);
         col.addView(about);
     }
@@ -347,32 +356,6 @@ public final class SettingsPage {
         row.setOnClickListener(v -> sw.toggle());
         row.setBackground(Ui.ripple(t, null, 0));
         return row;
-    }
-
-    private void diagnostics(LinearLayout box) {
-        String crash = app.morphe.extension.sabp.EppyDiag.lastCrash();
-        TextView status = Ui.text(c, t, crash == null ? "No crash recorded." : "A crash was recorded: " + firstLines(crash, 3), 13, 400,
-                crash == null ? t.onSurfaceVariant : t.onSurface);
-        status.setPadding(Ui.dp(c, 16), Ui.dp(c, 8), Ui.dp(c, 16), Ui.dp(c, 8));
-        box.addView(status);
-        LinearLayout row = Ui.row(c);
-        row.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 12));
-        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(c);
-        hs.setHorizontalScrollBarEnabled(false);
-        hs.addView(row);
-        box.addView(hs);
-        row.addView(Ui.chip(c, t, EppyIcon.CHECK, "Run checks", false, v -> showText("eppy self-check", app.morphe.extension.sabp.EppyBridge.selfCheck(c))));
-        row.addView(Ui.space(c, 8, 1));
-        row.addView(Ui.chip(c, t, EppyIcon.LIST, "Copy log", false, v -> copy("eppy log", app.morphe.extension.sabp.EppyDiag.logText())));
-        if (crash != null) {
-            row.addView(Ui.space(c, 8, 1));
-            row.addView(Ui.chip(c, t, EppyIcon.BOOKMARK, "Copy crash report", false, v -> copy("eppy crash report", crash)));
-            row.addView(Ui.space(c, 8, 1));
-            row.addView(Ui.chip(c, t, EppyIcon.CLOSE, "Clear", false, v -> {
-                app.morphe.extension.sabp.EppyDiag.clearCrash();
-                host.rebuild();
-            }));
-        }
     }
 
     private static String firstLines(String s, int n) {

@@ -270,4 +270,60 @@ public final class Ui {
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(c, wDp), dp(c, hDp)));
         return v;
     }
+
+    /** Settings row with a trailing switch; the whole row toggles. */
+    public static LinearLayout switchRow(Context c, EppyTheme t, String title, String summary, boolean value,
+                                         android.widget.CompoundButton.OnCheckedChangeListener l) {
+        LinearLayout row = row(c);
+        row.setMinimumHeight(dp(c, 64));
+        row.setPadding(dp(c, 16), dp(c, 8), dp(c, 16), dp(c, 8));
+        LinearLayout texts = column(c);
+        texts.addView(text(c, t, title, 16, 500, t.onSurface));
+        if (summary != null) {
+            TextView s = text(c, t, summary, 13, 400, t.onSurfaceVariant);
+            s.setPadding(0, dp(c, 4), 0, 0);
+            texts.addView(s);
+        }
+        row.addView(texts, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        android.widget.Switch sw = new android.widget.Switch(c);
+        sw.setChecked(value);
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        sw.setThumbTintList(new android.content.res.ColorStateList(states, new int[]{t.onPrimary, t.outline}));
+        sw.setTrackTintList(new android.content.res.ColorStateList(states, new int[]{t.primary, t.surfaceContainerHighest}));
+        sw.setContentDescription(title);
+        sw.setOnCheckedChangeListener((b, checked) -> {
+            haptic(b, t);
+            if (l != null) l.onCheckedChanged(b, checked);
+        });
+        row.addView(sw);
+        row.setOnClickListener(v -> sw.toggle());
+        row.setBackground(ripple(t, null, 0));
+        return row;
+    }
+
+    /** Tappable row: leading icon, title and optional summary. */
+    public static LinearLayout linkRow(Context c, EppyTheme t, int icon, String title, String summary, View.OnClickListener l) {
+        LinearLayout row = row(c);
+        row.setMinimumHeight(dp(c, 64));
+        row.setPadding(dp(c, 16), dp(c, 8), dp(c, 16), dp(c, 8));
+        android.widget.ImageView iv = new android.widget.ImageView(c);
+        iv.setImageDrawable(new EppyIcon(icon, t.onSurfaceVariant));
+        LinearLayout.LayoutParams il = new LinearLayout.LayoutParams(dp(c, 24), dp(c, 24));
+        il.rightMargin = dp(c, 16);
+        row.addView(iv, il);
+        LinearLayout texts = column(c);
+        texts.addView(text(c, t, title, 16, 500, t.onSurface));
+        if (summary != null) {
+            TextView s = text(c, t, summary, 13, 400, t.onSurfaceVariant);
+            s.setPadding(0, dp(c, 4), 0, 0);
+            texts.addView(s);
+        }
+        row.addView(texts, lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setOnClickListener(l);
+        row.setBackground(ripple(t, null, 0));
+        row.setContentDescription(title + (summary != null ? ". " + summary : ""));
+        return row;
+    }
 }

@@ -152,6 +152,40 @@ public final class EppyBridge {
     public static void saveBookmarks(Context context, ArrayList<?> bookmarks, String folderUri) {
     }
 
+    /** Patched: SABP's character list loader (characters.sabp.xml, ArrayList of CharacterDescription). */
+    public static ArrayList<?> loadCharacters(Context context, String folderUri) {
+        return null;
+    }
+
+    /** Patched: SABP's character list writer. */
+    public static void saveCharacters(Context context, ArrayList<?> characters, String folderUri) {
+    }
+
+    /** Patched: PlayerService's speed setter (speed, skip-silence level 0–5). Range 0.5–3.0. */
+    public static void setSpeed(Object service, float speed, int skipSilence) {
+    }
+
+    /** Patched: PlayerService's sleep-timer countdown text ("" when off), e.g. "9:58". */
+    public static String sleepRemaining(Object service) {
+        return null;
+    }
+
+    /** Patched: which SABP targets the patch found, "name=ok;name=missing: why". */
+    public static String hookReport() {
+        return "";
+    }
+
+    /** True when the patch found the named SABP target (see {@link #hookReport()}). */
+    public static boolean has(String hook) {
+        String r = hookReport();
+        if (r == null || r.isEmpty()) return isLinked();
+        for (String e : r.split(";")) {
+            int eq = e.indexOf('=');
+            if (eq > 0 && e.substring(0, eq).equals(hook)) return e.substring(eq + 1).equals("ok");
+        }
+        return false;
+    }
+
     /** Patched: true when the patch filled in the stubs above. */
     public static boolean isLinked() {
         return false;

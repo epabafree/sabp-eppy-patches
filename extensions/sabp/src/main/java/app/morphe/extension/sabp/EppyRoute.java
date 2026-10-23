@@ -133,6 +133,66 @@ public final class EppyRoute {
         }
     }
 
+    // ---- "Switch to eppy" inside Classic SABP --------------------------------------------------
+
+    /**
+     * Switches the player interface to eppy and opens it on the player. Playback lives in SABP's
+     * PlayerService, which neither activity owns, so nothing about playback changes.
+     */
+    public static void switchToEppy(Activity from) {
+        setInterface(from, INTERFACE_EPPY);
+        Intent to = new Intent();
+        to.setClassName(from.getPackageName(), EppyActivity.class.getName());
+        to.putExtra(EXTRA_FORCE_EPPY, true);
+        to.putExtra(EXTRA_OPEN_PLAYER, true);
+        to.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        EppyDiag.log("route", "switched to eppy from " + from.getClass().getSimpleName());
+        from.startActivity(to);
+        from.finish();
+    }
+
+    /** Injected just before the classic player's overflow menu is shown. */
+    public static void addClassicMenuItem(android.widget.PopupMenu menu) {
+        try {
+            final Context c = getContextOf(menu);
+            menu.getMenu().add(android.view.Menu.NONE, 0x65707079, 0, "Switch to eppy")
+                    .setOnMenuItemClickListener(item -> {
+                        if (c instanceof Activity) switchToEppy((Activity) c);
+                        return true;
+                    });
+        } catch (Throwable t) {
+            EppyDiag.log("route", "classic menu item failed: " + t);
+        }
+    }
+
+    private static Context getContextOf(android.widget.PopupMenu menu) {
+        // PopupMenu has no public context getter; the menu is always opened from the resumed
+        // activity, which EppyDiag tracks through the application's lifecycle callbacks.
+        return EppyDiag.resumedActivity();
+    }
+
+    /** Injected at the end of SABP's settings screen onCreate: a "Switch to eppy" row at the top. */
+    @SuppressWarnings("deprecation")
+    public static void addClassicSettingsEntry(Activity a) {
+        try {
+            if (!(a instanceof android.preference.PreferenceActivity)) return;
+            android.preference.PreferenceScreen screen = ((android.preference.PreferenceActivity) a).getPreferenceScreen();
+            if (screen == null) return;
+            android.preference.Preference p = new android.preference.Preference(a);
+            p.setKey("eppy_switch");
+            p.setTitle("Switch to eppy");
+            p.setSummary("Use the eppy player interface. Playback, books, bookmarks and settings stay the same.");
+            p.setOrder(-1000);
+            p.setOnPreferenceClickListener(pref -> {
+                switchToEppy(a);
+                return true;
+            });
+            screen.addPreference(p);
+        } catch (Throwable t) {
+            EppyDiag.log("route", "classic settings entry failed: " + t);
+        }
+    }
+
     /** Handles voice search ("play X on Smart AudioBook Player") the way PlayerActivity did. */
     static void handleSearch(Context c, Intent i) {
         if (i == null || !MediaPlaybackSearch.ACTION.equals(i.getAction())) return;

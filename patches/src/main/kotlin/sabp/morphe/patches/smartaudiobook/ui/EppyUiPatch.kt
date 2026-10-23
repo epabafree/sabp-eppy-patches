@@ -41,6 +41,10 @@ private const val BROWSER_SERVICE = "$SABP/MyMediaBrowserService;"
 private const val PLAYER_ACTIVITY = "$SABP/PlayerActivity;"
 private const val BOOK_STATE = "$SABP/BookData\$BookState;"
 private const val BOOKMARK = "$SABP/Bookmark;"
+private const val CHARACTER = "$SABP/CharacterDescription;"
+private const val SLEEP_SETTINGS = "$SABP/PlayerSettingsSleepActivity;"
+private const val SETTINGS_ACTIVITY = "$SABP/PlayerSettingsActivity;"
+const val EPPY_VERSION = "0.5.0"
 private const val EPPY_ACTIVITY = "app.morphe.extension.sabp.EppyActivity"
 
 private fun newLauncherFilter(doc: org.w3c.dom.Document): Element =
@@ -57,44 +61,24 @@ private val eppyUiBytecodePatch = bytecodePatch(
     extendWith("extensions/sabp.mpe")
 
     execute {
-        // 1. Let the extension see PlayerService come and go.
-        val service = mutableClassDefBy(PLAYER_SERVICE)
-        service.methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
-            .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceCreated(Landroid/app/Service;)V")
-        service.methods.single { it.name == "onDestroy" && it.parameterTypes.isEmpty() }
-            .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceDestroyed(Landroid/app/Service;)V")
+        // Resolve everything first, mutate after. A required target that's missing stops the
+        // patch before any class is changed, so it can never half-apply. An optional target that's
+        // missing leaves its EppyBridge stub at a safe default; the feature using it hides itself
+        // and Settings → Diagnostics shows why (hook report below).
+        val hooks = HookReport()
 
-        // 1b. Crash recorder + diagnostics as early as possible.
-        mutableClassDefBy("$SABP/SABPApplication;").methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
-            .addInstructions(0, "invoke-static {p0}, $EXT/EppyDiag;->install(Landroid/app/Application;)V")
-
-        // 1c. Central player routing. Every route into the classic player (notification content
-        //     intent, widgets, the library's "open book", voice search, Android restoring the task)
-        //     starts PlayerActivity, so its onCreate decides once: if the chosen player interface
-        //     is eppy (and the classic player wasn't asked for explicitly), call super.onCreate,
-        //     hand the intent to eppy and finish before any classic UI is built. Same pattern as
-        //     Morphe's YouTube settings hook (invoke-super → extension → return-void).
-        val playerActivity = mutableClassDefBy(PLAYER_ACTIVITY)
-        val onCreate = playerActivity.methods.single {
+        // ---- required ----------------------------------------------------------------------
+        val service = classDefBy(PLAYER_SERVICE)
+        val playerActivity = classDefBy(PLAYER_ACTIVITY)
+        val onCreate = playerActivity.methods.singleOrNull {
             it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;")
+        } ?: throw PatchException("Smart AudioBook Player: PlayerActivity.onCreate not found.")
+        if ((onCreate.implementation?.registerCount ?: 0) - 2 < 1) {
+            throw PatchException("Smart AudioBook Player: PlayerActivity.onCreate has no free register.")
         }
-        val locals = (onCreate.implementation?.registerCount ?: 0) - 2
-        if (locals < 1) throw PatchException("Smart AudioBook Player: PlayerActivity.onCreate has no free register.")
-        onCreate.addInstructions(
-            0,
-            """
-            invoke-static {p0}, $EXT/EppyRoute;->shouldRedirect(Landroid/app/Activity;)Z
-            move-result v0
-            if-eqz v0, :eppy_classic
-            invoke-super {p0, p1}, ${playerActivity.superclass}->onCreate(Landroid/os/Bundle;)V
-            invoke-static {p0}, $EXT/EppyRoute;->redirect(Landroid/app/Activity;)V
-            return-void
-            :eppy_classic
-            nop
-            """,
-        )
+        hooks.ok("router", "PlayerActivity.onCreate")
 
-        // 2. Resolve the library methods from the Android Auto browser service.
+        // Library methods, from the Android Auto browser service.
         val browser = classDefBy(BROWSER_SERVICE)
         val listMethod = browser.methods.singleOrNull {
             it.parameterTypes.map(CharSequence::toString) == listOf(BOOK_STATE) && it.returnType == "Ljava/util/List;"
@@ -104,64 +88,160 @@ private val eppyUiBytecodePatch = bytecodePatch(
             it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf(BOOK_STATE) &&
                 it.returnType == "Ljava/util/ArrayList;"
         } ?: throw PatchException("Smart AudioBook Player: PlayerService book list call not found.")
-        val coverKeys = calls.firstOrNull {
-            it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/util/ArrayList;") &&
-                it.returnType == "Ljava/util/ArrayList;"
-        } ?: throw PatchException("Smart AudioBook Player: PlayerService cover list call not found.")
-        val loadCovers = calls.firstOrNull {
-            it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/util/ArrayList;") &&
-                it.returnType == "Ljava/util/ArrayList;"
-        } ?: throw PatchException("Smart AudioBook Player: cover loader call not found.")
-
-        // 3. Resolve seeking from the classic player's SeekBar callbacks.
-        val activity = classDefBy(PLAYER_ACTIVITY)
-        val seekTracking = activity.methods.single {
-            it.name == "onStartTrackingTouch" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/widget/SeekBar;")
-        }.methodCalls().firstOrNull {
-            it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("Z") && it.returnType == "V"
-        } ?: throw PatchException("Smart AudioBook Player: seek start call not found.")
-        val seekTo = activity.methods.single {
-            it.name == "onProgressChanged" && it.parameterTypes.size == 3
-        }.methodCalls().firstOrNull {
-            it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("I") && it.returnType == "V"
-        } ?: throw PatchException("Smart AudioBook Player: seek call not found.")
-
-        // 4. Live file position: the first int getter PlayerService's media-metadata builder calls
-        //    (the method that puts "android.media.metadata.DURATION").
-        val metadataMethod = service.methods.firstOrNull { m ->
-            m.implementation?.instructions?.any {
-                ((it as? ReferenceInstruction)?.reference as? com.android.tools.smali.dexlib2.iface.reference.StringReference)
-                    ?.string == "android.media.metadata.DURATION"
-            } == true
-        } ?: throw PatchException("Smart AudioBook Player: media metadata builder not found.")
-        val filePosition = metadataMethod.methodCalls().firstOrNull {
-            it.definingClass == PLAYER_SERVICE && it.parameterTypes.isEmpty() && it.returnType == "I"
-        } ?: throw PatchException("Smart AudioBook Player: file position getter not found.")
-
-        // 5. Jump to file + position: the PlayerService method SABP's bookmarks, history and chapter
-        //    dialog call. It's the only (String, int, boolean) -> void method.
-        val jumpCandidates = service.methods.filter {
-            it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;", "I", "Z") && it.returnType == "V"
+        hooks.ok("library", books.name)
+        val coverKeys = hooks.optional("covers") {
+            calls.firstOrNull {
+                it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/util/ArrayList;") &&
+                    it.returnType == "Ljava/util/ArrayList;"
+            }
         }
-        val jump = jumpCandidates.singleOrNull()
-            ?: throw PatchException("Smart AudioBook Player: expected one jump method, found ${jumpCandidates.size}.")
+        val loadCovers = if (coverKeys == null) null else hooks.optional("coverLoader") {
+            calls.firstOrNull {
+                it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/util/ArrayList;") &&
+                    it.returnType == "Ljava/util/ArrayList;"
+            }
+        }
 
-        // 6. Bookmark file helpers on SABP's Bookmark class (static, package-private).
-        val bookmark = classDefBy(BOOKMARK)
-        val loadBookmarks = bookmark.methods.singleOrNull {
-            AccessFlags.STATIC.isSet(it.accessFlags) && it.returnType == "Ljava/util/ArrayList;" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/lang/String;")
-        } ?: throw PatchException("Smart AudioBook Player: bookmark loader not found.")
-        val saveBookmarks = bookmark.methods.singleOrNull {
-            AccessFlags.STATIC.isSet(it.accessFlags) && it.returnType == "V" &&
-                it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/util/ArrayList;", "Ljava/lang/String;")
-        } ?: throw PatchException("Smart AudioBook Player: bookmark writer not found.")
+        // ---- optional ----------------------------------------------------------------------
+        // Seeking, from the classic player's SeekBar callbacks.
+        val seekTracking = hooks.optional("seekTracking") {
+            playerActivity.methods.singleOrNull {
+                it.name == "onStartTrackingTouch" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/widget/SeekBar;")
+            }?.methodCalls()?.firstOrNull {
+                it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("Z") && it.returnType == "V"
+            }
+        }
+        val seekTo = hooks.optional("seek") {
+            playerActivity.methods.singleOrNull { it.name == "onProgressChanged" && it.parameterTypes.size == 3 }
+                ?.methodCalls()?.firstOrNull {
+                    it.definingClass == PLAYER_SERVICE && it.parameterTypes.map(CharSequence::toString) == listOf("I") && it.returnType == "V"
+                }
+        }
+        // Live file position: the first int getter the media-metadata builder calls.
+        val filePosition = hooks.optional("filePosition") {
+            service.methods.firstOrNull { m -> m.hasString("android.media.metadata.DURATION") }
+                ?.methodCalls()?.firstOrNull {
+                    it.definingClass == PLAYER_SERVICE && it.parameterTypes.isEmpty() && it.returnType == "I"
+                }
+        }
+        // Jump to file + position: the only (String, int, boolean) -> void method.
+        val jump = hooks.optional("jump") {
+            service.methods.filter {
+                it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;", "I", "Z") && it.returnType == "V"
+            }.singleOrNull()?.asReference()
+        }
+        // Bookmark and character files (static helpers that read/write <folder>/*.sabp.xml).
+        fun staticIo(cls: String, key: String): Pair<MethodReference?, MethodReference?> {
+            val def = classDefBy(cls)
+            val load = hooks.optional("${key}Load") {
+                def.methods.singleOrNull {
+                    AccessFlags.STATIC.isSet(it.accessFlags) && it.returnType == "Ljava/util/ArrayList;" &&
+                        it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/lang/String;")
+                }?.asReference()
+            }
+            val save = hooks.optional("${key}Save") {
+                def.methods.singleOrNull {
+                    AccessFlags.STATIC.isSet(it.accessFlags) && it.returnType == "V" &&
+                        it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/content/Context;", "Ljava/util/ArrayList;", "Ljava/lang/String;")
+                }?.asReference()
+            }
+            return load to save
+        }
+        val (loadBookmarks, saveBookmarks) = staticIo(BOOKMARK, "bookmarks")
+        val (loadCharacters, saveCharacters) = staticIo(CHARACTER, "characters")
+        // Speed: PlayerService's public (float speed, int skipSilence) setter. The package-private
+        // twin with the same signature applies the default to new books only.
+        val setSpeed = hooks.optional("speed") {
+            service.methods.filter {
+                it.parameterTypes.map(CharSequence::toString) == listOf("F", "I") && it.returnType == "V" &&
+                    AccessFlags.PUBLIC.isSet(it.accessFlags)
+            }.singleOrNull()?.asReference()
+        }
+        // Sleep timer countdown text: the String getter that combines the sleep setting
+        // (PlayerSettingsSleepActivity) with PlayerActivity's time formatter.
+        val sleepRemaining = hooks.optional("sleepRemaining") {
+            service.methods.filter { m ->
+                m.returnType == "Ljava/lang/String;" && m.parameterTypes.isEmpty() &&
+                    m.methodCalls().any { it.definingClass == SLEEP_SETTINGS } &&
+                    m.methodCalls().any { it.definingClass == PLAYER_ACTIVITY && it.returnType == "Ljava/lang/String;" }
+            }.singleOrNull()?.asReference()
+        }
+        // Classic player overflow menu (PopupMenu built in PlayerActivity): eppy adds its own
+        // "Switch to eppy" item just before show().
+        val popupMethods = playerActivity.methods.filter { m ->
+            m.methodCalls().any { it.definingClass == "Landroid/widget/PopupMenu;" && it.name == "inflate" } &&
+                m.methodCalls().any { it.definingClass == "Landroid/widget/PopupMenu;" && it.name == "show" }
+        }
+        val classicMenu = hooks.optional("classicMenu") { popupMethods.singleOrNull() }
+        val settingsActivity = classDefBy(SETTINGS_ACTIVITY)
+        val settingsOnCreate = hooks.optional("classicSettings") {
+            settingsActivity.methods.singleOrNull {
+                it.name == "onCreate" && it.parameterTypes.map(CharSequence::toString) == listOf("Landroid/os/Bundle;")
+            }
+        }
+
+        // ---- mutate ------------------------------------------------------------------------
+        val mService = mutableClassDefBy(PLAYER_SERVICE)
+        mService.methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
+            .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceCreated(Landroid/app/Service;)V")
+        mService.methods.single { it.name == "onDestroy" && it.parameterTypes.isEmpty() }
+            .addInstructions(0, "invoke-static {p0}, $BRIDGE->onPlayerServiceDestroyed(Landroid/app/Service;)V")
+
+        // Crash recorder + diagnostics as early as possible.
+        mutableClassDefBy("$SABP/SABPApplication;").methods.single { it.name == "onCreate" && it.parameterTypes.isEmpty() }
+            .addInstructions(0, "invoke-static {p0}, $EXT/EppyDiag;->install(Landroid/app/Application;)V")
+
+        // Central player routing. Every route into the classic player (notification, widgets,
+        // library, voice search, task restore) starts PlayerActivity, so its onCreate decides once.
+        // Same pattern as Morphe's YouTube settings hook (invoke-super → extension → return-void).
+        val mPlayerActivity = mutableClassDefBy(PLAYER_ACTIVITY)
+        mPlayerActivity.methods.single { it.name == onCreate.name && it.parameterTypes == onCreate.parameterTypes }.addInstructions(
+            0,
+            """
+            invoke-static {p0}, $EXT/EppyRoute;->shouldRedirect(Landroid/app/Activity;)Z
+            move-result v0
+            if-eqz v0, :eppy_classic
+            invoke-super {p0, p1}, ${mPlayerActivity.superclass}->onCreate(Landroid/os/Bundle;)V
+            invoke-static {p0}, $EXT/EppyRoute;->redirect(Landroid/app/Activity;)V
+            return-void
+            :eppy_classic
+            nop
+            """,
+        )
+
+        // "Switch to eppy" inside Classic: the player's overflow menu and the settings screen.
+        if (classicMenu != null) {
+            val m = mPlayerActivity.methods.single { it.name == classicMenu.name && it.parameterTypes == classicMenu.parameterTypes }
+            val insns = m.instructions
+            val showIndex = insns.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? MethodReference)?.let { r ->
+                    r.definingClass == "Landroid/widget/PopupMenu;" && r.name == "show"
+                } == true
+            }
+            val reg = (insns[showIndex] as com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c).registerC
+            m.addInstructions(showIndex, "invoke-static {v$reg}, $EXT/EppyRoute;->addClassicMenuItem(Landroid/widget/PopupMenu;)V")
+        }
+        if (settingsOnCreate != null) {
+            val m = mutableClassDefBy(SETTINGS_ACTIVITY).methods.single { it.name == "onCreate" && it.parameterTypes == settingsOnCreate.parameterTypes }
+            // After the screen is built: the first call onCreate makes into its own class (the
+            // preference-screen builder). R8 reuses p0 later in the method, so take the receiver
+            // register from that call rather than assuming p0.
+            val insns = m.instructions
+            val build = insns.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? MethodReference)?.definingClass == SETTINGS_ACTIVITY &&
+                    it is com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c
+            }
+            if (build >= 0) {
+                val reg = (insns[build] as com.android.tools.smali.dexlib2.iface.instruction.formats.Instruction35c).registerC
+                m.addInstructions(build + 1, "invoke-static {v$reg}, $EXT/EppyRoute;->addClassicSettingsEntry(Landroid/app/Activity;)V")
+            }
+        }
 
         // Package-private targets must be public: the extension lives in another package.
-        listOf(books, coverKeys, loadCovers, seekTracking, seekTo, filePosition).forEach { makeAccessible(it) }
-        listOf(jump, loadBookmarks, saveBookmarks).forEach { makeAccessible(it.asReference()) }
+        listOfNotNull(books, coverKeys, loadCovers, seekTracking, seekTo, filePosition, jump, loadBookmarks, saveBookmarks,
+            loadCharacters, saveCharacters, setSpeed, sleepRemaining).forEach { makeAccessible(it) }
 
-        // 4. Fill in the EppyBridge stubs.
+        // Fill in the EppyBridge stubs for everything that resolved.
         val bridge = mutableClassDefBy(BRIDGE)
         fun stub(name: String) = bridge.methods.single { it.name == name }
         stub("booksForState").replaceBody(
@@ -173,70 +253,154 @@ private val eppyUiBytecodePatch = bytecodePatch(
             return-object v0
             """,
         )
-        stub("coverKeys").replaceBody(
-            """
-            check-cast p0, $PLAYER_SERVICE
-            invoke-virtual {p0, p1}, ${coverKeys.smali()}
-            move-result-object v0
-            return-object v0
-            """,
-        )
-        stub("loadCovers").replaceBody(
-            """
-            invoke-static {p0, p1}, ${loadCovers.smali()}
-            move-result-object v0
-            return-object v0
-            """,
-        )
-        stub("seekTracking").replaceBody(
-            """
-            check-cast p0, $PLAYER_SERVICE
-            invoke-virtual {p0, p1}, ${seekTracking.smali()}
-            return-void
-            """,
-        )
-        stub("seekToSeconds").replaceBody(
-            """
-            check-cast p0, $PLAYER_SERVICE
-            invoke-virtual {p0, p1}, ${seekTo.smali()}
-            return-void
-            """,
-        )
-        stub("filePositionSeconds").replaceBody(
-            """
-            check-cast p0, $PLAYER_SERVICE
-            invoke-virtual {p0}, ${filePosition.smali()}
-            move-result v0
-            return v0
-            """,
-        )
-        stub("jumpTo").replaceBody(
-            """
-            check-cast p0, $PLAYER_SERVICE
-            invoke-virtual {p0, p1, p2, p3}, ${jump.asReference().smali()}
-            return-void
-            """,
-        )
-        stub("loadBookmarks").replaceBody(
-            """
-            invoke-static {p0, p1}, ${loadBookmarks.asReference().smali()}
-            move-result-object v0
-            return-object v0
-            """,
-        )
-        stub("saveBookmarks").replaceBody(
-            """
-            invoke-static {p0, p1, p2}, ${saveBookmarks.asReference().smali()}
-            return-void
-            """,
-        )
+        coverKeys?.let {
+            stub("coverKeys").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1}, ${it.smali()}
+                move-result-object v0
+                return-object v0
+                """,
+            )
+        }
+        loadCovers?.let {
+            stub("loadCovers").replaceBody(
+                """
+                invoke-static {p0, p1}, ${it.smali()}
+                move-result-object v0
+                return-object v0
+                """,
+            )
+        }
+        seekTracking?.let {
+            stub("seekTracking").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        seekTo?.let {
+            stub("seekToSeconds").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        filePosition?.let {
+            stub("filePositionSeconds").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0}, ${it.smali()}
+                move-result v0
+                return v0
+                """,
+            )
+        }
+        jump?.let {
+            stub("jumpTo").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1, p2, p3}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        loadBookmarks?.let {
+            stub("loadBookmarks").replaceBody(
+                """
+                invoke-static {p0, p1}, ${it.smali()}
+                move-result-object v0
+                return-object v0
+                """,
+            )
+        }
+        saveBookmarks?.let {
+            stub("saveBookmarks").replaceBody(
+                """
+                invoke-static {p0, p1, p2}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        loadCharacters?.let {
+            stub("loadCharacters").replaceBody(
+                """
+                invoke-static {p0, p1}, ${it.smali()}
+                move-result-object v0
+                return-object v0
+                """,
+            )
+        }
+        saveCharacters?.let {
+            stub("saveCharacters").replaceBody(
+                """
+                invoke-static {p0, p1, p2}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        setSpeed?.let {
+            stub("setSpeed").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0, p1, p2}, ${it.smali()}
+                return-void
+                """,
+            )
+        }
+        sleepRemaining?.let {
+            stub("sleepRemaining").replaceBody(
+                """
+                check-cast p0, $PLAYER_SERVICE
+                invoke-virtual {p0}, ${it.smali()}
+                move-result-object v0
+                return-object v0
+                """,
+            )
+        }
         stub("isLinked").replaceBody(
             """
             const/4 v0, 0x1
             return v0
             """,
         )
+        stub("hookReport").replaceBody(
+            """
+            const-string v0, "${hooks.encode()}"
+            return-object v0
+            """,
+        )
+        hooks.missing().forEach { println("WARNING: eppy: optional hook unavailable: $it") }
     }
+}
+
+/** Patch-time record of which SABP targets were found; shown in eppy → Diagnostics. */
+private class HookReport {
+    private val entries = linkedMapOf<String, String>()
+
+    fun ok(name: String, detail: String) {
+        entries[name] = "ok"
+    }
+
+    fun <T : Any> optional(name: String, find: () -> T?): T? {
+        val found = try {
+            find()
+        } catch (e: Throwable) {
+            entries[name] = "missing: ${e.message ?: e.javaClass.simpleName}"
+            return null
+        }
+        entries[name] = if (found != null) "ok" else "missing: no unique match"
+        return found
+    }
+
+    fun missing() = entries.filterValues { it != "ok" }.map { "${it.key} (${it.value})" }
+
+    /** name=status;name=status — no quotes or backslashes so it's safe inside const-string. */
+    fun encode() = entries.entries.joinToString(";") { (k, v) -> "$k=" + v.replace(Regex("[\"\\\\;=]"), " ") }
 }
 
 @Suppress("unused")
@@ -332,6 +496,7 @@ val eppyUiPatch = resourcePatch(
             put("eppy_custom_accent", customAccent ?: "#E8735A")
             put("eppy_default_skin", defaultSkin ?: "material")
             put("eppy_speech", if (speechMatching == true) "on" else "off")
+            put("eppy_version", EPPY_VERSION)
             put("eppy_default_interface", if (startScreen != false) "eppy" else "classic")
         }
 
@@ -399,6 +564,10 @@ val eppyUiPatch = resourcePatch(
 
 private fun Method.methodCalls(): List<MethodReference> =
     implementation?.instructions?.mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }.orEmpty()
+
+private fun Method.hasString(value: String): Boolean = implementation?.instructions?.any {
+    ((it as? ReferenceInstruction)?.reference as? com.android.tools.smali.dexlib2.iface.reference.StringReference)?.string == value
+} == true
 
 private fun Method.asReference(): MethodReference =
     com.android.tools.smali.dexlib2.immutable.reference.ImmutableMethodReference(definingClass, name, parameterTypes, returnType)

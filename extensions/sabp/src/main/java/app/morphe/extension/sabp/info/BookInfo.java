@@ -90,7 +90,7 @@ public final class BookInfo {
     }
 
     public static boolean onlineEnabled(Context c) {
-        return prefs(c).getBoolean("online", false);
+        return prefs(c).getBoolean("online", false) && app.morphe.extension.sabp.EppyFlags.on(c, app.morphe.extension.sabp.EppyFlags.ONLINE_LOOKUP);
     }
 
     public static boolean automatic(Context c) {

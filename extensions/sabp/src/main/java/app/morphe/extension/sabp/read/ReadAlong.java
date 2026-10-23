@@ -222,7 +222,7 @@ public final class ReadAlong {
 
     /** Pairs a picked EPUB/PDF with the current audiobook. */
     public void pair(Uri uri) {
-        if (folderUri == null) return;
+        if (folderUri == null || !enabled()) return;
         cancel();
         try {
             c.getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -468,7 +468,13 @@ public final class ReadAlong {
     // ---- stage 4: speech sampling ---------------------------------------------------------------
 
     /** Called from the UI every second while visible: adds a fresh match every ~2 min of playback. */
+    /** False when Read along is switched off in Diagnostics. */
+    public boolean enabled() {
+        return app.morphe.extension.sabp.EppyFlags.on(c, app.morphe.extension.sabp.EppyFlags.READ_ALONG);
+    }
+
     public void tick(double bookSeconds, boolean playing) {
+        if (!enabled()) return;
         if (text == null || text.pagesOnly || !playing || bookSeconds < 0 || state != State.READY) return;
         if (!canAutoMatch() || speech.isBusy() || failuresInRow >= 3) return;
         long now = SystemClock.elapsedRealtime();

@@ -132,6 +132,22 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
     }
 
     private void rebuild() {
+        if (!ra.enabled()) {
+            list.setVisibility(View.GONE);
+            statusBar.setVisibility(View.GONE);
+            actions.removeAllViews();
+            empty.setVisibility(View.VISIBLE);
+            empty.removeAllViews();
+            TextView h = Ui.text(c, t, "Read along is turned off", 19, 650, t.onSurface);
+            h.setGravity(Gravity.CENTER);
+            empty.addView(h);
+            TextView p = Ui.text(c, t, "It was switched off in Settings → Diagnostics → Feature switches. Your pairings are kept.", 14, 400, t.onSurfaceVariant);
+            p.setGravity(Gravity.CENTER);
+            p.setPadding(0, Ui.dp(c, 8), 0, Ui.dp(c, 16));
+            empty.addView(p);
+            empty.addView(Ui.filledButton(c, t, "Open Diagnostics", v -> host.pushPage(DiagnosticsPage.KEY, null)));
+            return;
+        }
         BookText nt = ra.text();
         if (nt != text) {
             text = nt;

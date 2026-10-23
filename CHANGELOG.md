@@ -1,5 +1,26 @@
 # Release notes
 
+## v0.5.0: v2 spec round A (inventory, diagnostics, safe patching)
+
+### Added
+- **Switch to eppy inside Classic SABP**: in the classic player's ⋮ menu and at the top of SABP's Settings.
+  Playback isn't touched: it lives in SABP's service, not in either screen.
+- **Diagnostics page** (Settings → Help and bug reports → Diagnostics, or tap the version line five times):
+  versions, which SABP targets the patch found, a runtime check, feature switches, storage used by eppy,
+  recent errors, the last crash, and a log you can view, copy or export.
+- **Feature switches**: Read along, online book information, listening log, blur, term lookup and cover
+  gestures can each be turned off from Diagnostics, without re-patching.
+- **Native page back stack**: eppy screens open over the current tab and Back returns to where you were.
+- **docs/inventory.md**: every SABP setting (key, type, default, screen, status), the data model, the
+  navigation map, the hook list with fallbacks, and the compatibility matrix.
+
+### Changed
+- **The patch can no longer half-apply.** It resolves every SABP target before changing anything. A missing
+  required target stops the patch with a clear message; a missing optional target leaves a safe stub, and
+  Diagnostics names the hidden feature.
+- New optional hooks for later rounds: speed setter, sleep-timer countdown, character list.
+
+
 ## v0.4.0: stability release (renamed to eppy)
 
 ### Fixed

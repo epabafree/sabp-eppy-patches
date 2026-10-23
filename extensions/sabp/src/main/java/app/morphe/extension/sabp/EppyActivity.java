@@ -104,6 +104,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         if (state != null) {
             tab = state.getInt("tab", TAB_HOME);
             playerOpen = state.getBoolean("playerOpen", false);
+            java.util.ArrayList<String> keys = state.getStringArrayList("pages");
+            if (keys != null) for (String k : keys) {
+                int sep = k.indexOf('\u0001');
+                String arg = sep >= 0 ? k.substring(sep + 1) : "";
+                pageKeys.add(new String[]{sep >= 0 ? k.substring(0, sep) : k, arg.isEmpty() ? null : arg});
+            }
         } else if (getIntent() != null && getIntent().getBooleanExtra("openPlayer", false)) {
             playerOpen = true;
         }
@@ -130,6 +136,60 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
 
     private int pendingSheetTab = -1;
 
+    // ---- page back stack ----------------------------------------------------------------------
+    private final java.util.ArrayList<String[]> pageKeys = new java.util.ArrayList<>();
+    private final java.util.ArrayList<app.morphe.extension.sabp.ui.Page> pageStack = new java.util.ArrayList<>();
+
+    @Override
+    public void pushPage(String key, String arg) {
+        app.morphe.extension.sabp.ui.Page p = app.morphe.extension.sabp.ui.Pages.create(this, key, arg);
+        if (p == null) return;
+        if (playerOpen) closePlayer();
+        pageKeys.add(new String[]{key, arg});
+        attachPage(p, true);
+        EppyDiag.log("nav", "open page " + key);
+    }
+
+    private void attachPage(app.morphe.extension.sabp.ui.Page p, boolean animate) {
+        pageStack.add(p);
+        pages.addView(p.root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        p.setBottomInset(contentBottomInset());
+        if (animate && !theme.reduceMotion) {
+            p.root.setTranslationX(Ui.dp(this, 48));
+            p.root.setAlpha(0f);
+            p.root.animate().translationX(0).alpha(1f).setDuration(220).setInterpolator(new PathInterpolator(0.2f, 0f, 0f, 1f)).start();
+        }
+        p.root.requestFocus();
+    }
+
+    @Override
+    public void popPage() {
+        if (pageStack.isEmpty()) return;
+        app.morphe.extension.sabp.ui.Page p = pageStack.remove(pageStack.size() - 1);
+        pageKeys.remove(pageKeys.size() - 1);
+        p.onRemoved();
+        final View v = p.root;
+        if (theme.reduceMotion) pages.removeView(v);
+        else v.animate().translationX(Ui.dp(this, 48)).alpha(0f).setDuration(160).withEndAction(() -> pages.removeView(v)).start();
+    }
+
+    private void clearPages() {
+        for (app.morphe.extension.sabp.ui.Page p : pageStack) {
+            p.onRemoved();
+            pages.removeView(p.root);
+        }
+        pageStack.clear();
+        pageKeys.clear();
+    }
+
+    /** Space scrollable content keeps clear at the bottom so the last item is reachable. */
+    private int contentBottomInset() {
+        int inset = Ui.dp(this, 24);
+        if (miniPlayer != null && player != null && player.hasSession()) inset += Ui.dp(this, 64 + 12);
+        if (widthClass == 0 && navContainer != null && theme.navStyle != EppyTheme.NAV_BAR) inset += Ui.dp(this, 82);
+        return inset;
+    }
+
     private void showPlayerSheet(int tabIndex) {
         if (sidePane != null) sidePane.showSheet(tabIndex);
         else {
@@ -145,6 +205,9 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         out.putBoolean("playerOpen", playerOpen);
         int sheetTab = overlayPane != null ? overlayPane.openSheetTab() : sidePane != null ? sidePane.openSheetTab() : -1;
         out.putInt("sheetTab", sheetTab);
+        java.util.ArrayList<String> keys = new java.util.ArrayList<>();
+        for (String[] k : pageKeys) keys.add(k[0] + "\u0001" + (k[1] != null ? k[1] : ""));
+        out.putStringArrayList("pages", keys);
     }
 
     @Override
@@ -196,6 +259,10 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         if (sidePane != null && sidePane.onBack()) return;
         if (playerOpen && overlayPane != null) {
             closePlayer();
+            return;
+        }
+        if (!pageStack.isEmpty()) {
+            if (!pageStack.get(pageStack.size() - 1).onBack()) popPage();
             return;
         }
         if (tab == TAB_HOME && home != null && home.onBack()) return;
@@ -301,6 +368,15 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         setContentView(root);
         applySystemBars();
         showTab(tab == TAB_BOOKMARKS ? TAB_HOME : tab);
+        pageStack.clear();
+        java.util.ArrayList<String[]> keys = new java.util.ArrayList<>(pageKeys);
+        pageKeys.clear();
+        for (String[] k : keys) {
+            app.morphe.extension.sabp.ui.Page p = app.morphe.extension.sabp.ui.Pages.create(this, k[0], k[1]);
+            if (p == null) continue;
+            pageKeys.add(k);
+            attachPage(p, false);
+        }
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int contentW = pages.getWidth();
             if (contentW > 0) library.setWidth(contentW);
@@ -605,6 +681,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
             openSabp(EppyBridge.BOOKMARKS_ACTIVITY);
             return;
         }
+        if (!pageStack.isEmpty()) clearPages();
         if (t == tab) return;
         tab = t;
         // Rebuild the navigation so the indicator moves; content views are kept.
@@ -747,7 +824,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         }
         if (overlayPane != null) overlayPane.update(false);
         if (sidePane != null) sidePane.update(false);
-        if (home != null && tab == TAB_HOME) home.tick();
+        if (home != null && tab == TAB_HOME && pageStack.isEmpty()) home.tick();
+        if (!pageStack.isEmpty()) pageStack.get(pageStack.size() - 1).tick();
         tickMini();
     }
 

@@ -52,7 +52,25 @@ public final class EppyDiag {
             }
             if (previous != null) previous.uncaughtException(thread, error);
         });
+        application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(android.app.Activity a, android.os.Bundle b) { }
+            @Override public void onActivityStarted(android.app.Activity a) { }
+            @Override public void onActivityResumed(android.app.Activity a) { resumed = new java.lang.ref.WeakReference<>(a); }
+            @Override public void onActivityPaused(android.app.Activity a) { }
+            @Override public void onActivityStopped(android.app.Activity a) { }
+            @Override public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) { }
+            @Override public void onActivityDestroyed(android.app.Activity a) {
+                if (resumed.get() == a) resumed = new java.lang.ref.WeakReference<>(null);
+            }
+        });
         log("app", "started · Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL);
+    }
+
+    private static java.lang.ref.WeakReference<android.app.Activity> resumed = new java.lang.ref.WeakReference<>(null);
+
+    /** The activity currently in front (any of SABP's or eppy's), or null. */
+    public static android.app.Activity resumedActivity() {
+        return resumed.get();
     }
 
     public static void ensure(Context c) {
@@ -71,6 +89,31 @@ public final class EppyDiag {
         Log.i(TAG, line);
         lines.addLast(line);
         while (lines.size() > 300) lines.removeFirst();
+    }
+
+    /** Logs and also keeps the message in the persistent "last errors" list (20 entries). */
+    public static synchronized void error(String area, String message) {
+        log(area, "ERROR " + message);
+        if (app == null) return;
+        try {
+            String prev = prefs().getString("errors", "");
+            String line = FMT.format(new Date()) + "  [" + area + "] " + message.replace('\n', ' ');
+            String[] old = prev.isEmpty() ? new String[0] : prev.split("\n");
+            StringBuilder b = new StringBuilder(line);
+            for (int i = 0; i < Math.min(19, old.length); i++) b.append('\n').append(old[i]);
+            prefs().edit().putString("errors", b.toString()).apply();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Most recent first; empty when none. */
+    public static String lastErrors() {
+        if (app == null) return "";
+        return prefs().getString("errors", "");
+    }
+
+    public static void clearErrors() {
+        if (app != null) prefs().edit().remove("errors").apply();
     }
 
     public static synchronized String logText() {
