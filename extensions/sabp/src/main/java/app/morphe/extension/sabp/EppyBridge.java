@@ -131,6 +131,27 @@ public final class EppyBridge {
     public static void seekToSeconds(Object service, int seconds) {
     }
 
+    /** Patched: PlayerService's live position in the current file, in seconds (-1 if unknown). */
+    public static int filePositionSeconds(Object service) {
+        return -1;
+    }
+
+    /**
+     * Patched: PlayerService's jump-to method, the one SABP's bookmarks, history and chapter
+     * dialog use. Opens fileName at the given second; resume=true keeps playing.
+     */
+    public static void jumpTo(Object service, String fileName, int seconds, boolean resume) {
+    }
+
+    /** Patched: SABP's bookmark loader (reads bookmarks.sabp.xml from the book folder). */
+    public static ArrayList<?> loadBookmarks(Context context, String folderUri) {
+        return null;
+    }
+
+    /** Patched: SABP's bookmark writer. */
+    public static void saveBookmarks(Context context, ArrayList<?> bookmarks, String folderUri) {
+    }
+
     /** Patched: true when the patch filled in the stubs above. */
     public static boolean isLinked() {
         return false;

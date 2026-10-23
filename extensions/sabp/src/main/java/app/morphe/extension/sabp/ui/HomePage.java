@@ -54,24 +54,125 @@ public final class HomePage {
         col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 140));
         root.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // Header: greeting + search + settings.
-        LinearLayout header = Ui.row(c);
-        LinearLayout greet = Ui.column(c);
-        TextView hello = Ui.text(c, t, greeting(), 30, 600, t.onSurface);
-        hello.setAccessibilityHeading(true);
-        greet.addView(hello);
-        TextView sub = Ui.text(c, t, "Your next chapter is waiting.", 15, 400, t.onSurfaceVariant);
-        sub.setPadding(0, Ui.dp(c, 6), 0, 0);
-        greet.addView(sub);
-        header.addView(greet, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        header.addView(Ui.iconButton(c, t, EppyIcon.SEARCH, t.onSurface, t.surfaceContainerHigh, "Search books", v -> toggleSearch()));
-        header.addView(Ui.space(c, 8, 1));
-        header.addView(Ui.iconButton(c, t, EppyIcon.TUNE, t.onSurface, t.surfaceContainerHigh, "Settings", v -> host.selectTab(3)));
-        col.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        col.addView(header(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         dynamic = Ui.column(c);
         col.addView(dynamic, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         rebuild();
+    }
+
+    /** Header in the style of the active skin. */
+    private View header() {
+        String name = t.userName != null ? t.userName.trim() : "";
+        int iconBg = t.cardShadow ? t.surfaceContainerLow : t.surfaceContainerHigh;
+        if (t.homeStyle == EppyTheme.HOME_EXPLORE) {
+            LinearLayout box = Ui.column(c);
+            LinearLayout row = Ui.row(c);
+            row.addView(Ui.iconButton(c, t, EppyIcon.GRID, t.onSurface, iconBg, "Library", v -> host.selectTab(1)));
+            TextView title = Ui.text(c, t, "Explore", 20, 600, t.onSurface);
+            title.setGravity(Gravity.CENTER);
+            title.setAccessibilityHeading(true);
+            row.addView(title, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            row.addView(Ui.iconButton(c, t, EppyIcon.TUNE, t.onPrimary, t.primary, "Settings", v -> host.selectTab(3)));
+            box.addView(row);
+            TextView fakeSearch = Ui.text(c, t, "Search book", 15, 400, t.onSurfaceVariant);
+            fakeSearch.setGravity(Gravity.CENTER_VERTICAL);
+            fakeSearch.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 20), 0);
+            fakeSearch.setBackground(Ui.ripple(t, Ui.rounded(t.surfaceContainerLow, Ui.dp(c, 28)), Ui.dp(c, 28)));
+            fakeSearch.setElevation(Ui.dp(c, 3));
+            EppyIcon si = new EppyIcon(EppyIcon.SEARCH, t.onSurface);
+            si.setBounds(0, 0, Ui.dp(c, 22), Ui.dp(c, 22));
+            fakeSearch.setCompoundDrawables(null, null, si, null);
+            fakeSearch.setOnClickListener(v -> toggleSearch());
+            fakeSearch.setContentDescription("Search books");
+            LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 56));
+            sl.topMargin = Ui.dp(c, 20);
+            box.addView(fakeSearch, sl);
+            return box;
+        }
+        if (t.homeStyle == EppyTheme.HOME_HEADLINE) {
+            LinearLayout box = Ui.column(c);
+            LinearLayout row = Ui.row(c);
+            row.addView(avatar(name));
+            TextView hi = Ui.text(c, t, "", 16, 400, t.onSurfaceVariant);
+            android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder("Hi, ");
+            int st = sb.length();
+            sb.append(name.isEmpty() ? "listener" : name);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(t.onSurface), st, sb.length(), 0);
+            hi.setText(sb);
+            hi.setPadding(Ui.dp(c, 12), 0, 0, 0);
+            row.addView(hi, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            row.addView(Ui.iconButton(c, t, EppyIcon.SEARCH, t.onSurface, iconBg, "Search books", v -> toggleSearch()));
+            row.addView(Ui.space(c, 8, 1));
+            row.addView(Ui.iconButton(c, t, EppyIcon.TUNE, t.onSurface, iconBg, "Settings", v -> host.selectTab(3)));
+            box.addView(row);
+            TextView big = Ui.text(c, t, "", 34, 500, t.onSurface);
+            android.text.SpannableStringBuilder h = new android.text.SpannableStringBuilder("Let's pick up\nwhere your\nstory left off");
+            h.setSpan(new android.text.style.ForegroundColorSpan(EppyTheme.withAlpha(t.onSurface, 0.55f)), 0, 13, 0);
+            big.setText(h);
+            big.setLineSpacing(0, 1.05f);
+            big.setPadding(0, Ui.dp(c, 24), 0, 0);
+            big.setAccessibilityHeading(true);
+            box.addView(big);
+            return box;
+        }
+        // Greeting style (Material You, Ember, Paper).
+        LinearLayout header = Ui.row(c);
+        if (!t.skin.equals(EppyTheme.SKIN_MATERIAL)) header.addView(avatar(name));
+        LinearLayout greet = Ui.column(c);
+        if (!t.skin.equals(EppyTheme.SKIN_MATERIAL)) greet.setPadding(Ui.dp(c, 12), 0, 0, 0);
+        TextView hello = Ui.text(c, t, "", t.skin.equals(EppyTheme.SKIN_MATERIAL) ? 30 : 19, t.skin.equals(EppyTheme.SKIN_MATERIAL) ? 600 : 400, t.onSurfaceVariant);
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder(t.skin.equals(EppyTheme.SKIN_EMBER) ? shortGreeting() : greeting());
+        if (!name.isEmpty()) {
+            sb.append(", ");
+            int st = sb.length();
+            sb.append(name);
+            sb.setSpan(new android.text.style.ForegroundColorSpan(t.onSurface), st, sb.length(), 0);
+            sb.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), st, sb.length(), 0);
+        } else {
+            sb.setSpan(new android.text.style.ForegroundColorSpan(t.onSurface), 0, sb.length(), 0);
+        }
+        hello.setText(sb);
+        hello.setAccessibilityHeading(true);
+        greet.addView(hello);
+        if (!t.skin.equals(EppyTheme.SKIN_EMBER)) {
+            TextView sub = Ui.text(c, t, t.skin.equals(EppyTheme.SKIN_PAPER) ? "We have some fantastic books for you." : "Your next chapter is waiting.", 14, 400, t.onSurfaceVariant);
+            sub.setPadding(0, Ui.dp(c, 4), 0, 0);
+            greet.addView(sub);
+        }
+        header.addView(greet, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(Ui.iconButton(c, t, EppyIcon.SEARCH, t.onSurface, iconBg, "Search books", v -> toggleSearch()));
+        header.addView(Ui.space(c, 8, 1));
+        header.addView(Ui.iconButton(c, t, EppyIcon.TUNE, t.onSurface, iconBg, "Settings", v -> host.selectTab(3)));
+        return header;
+    }
+
+    private View avatar(String name) {
+        TextView a = Ui.text(c, t, name.isEmpty() ? "" : name.substring(0, 1).toUpperCase(), 18, 650, t.onPrimary);
+        a.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[]{t.primary, t.tertiary != 0 ? t.tertiary : t.primary});
+        d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        a.setBackground(d);
+        if (name.isEmpty()) {
+            a.setCompoundDrawablePadding(0);
+            EppyIcon p = new EppyIcon(EppyIcon.PERSON, t.onPrimary);
+            p.setBounds(0, 0, Ui.dp(c, 22), Ui.dp(c, 22));
+            a.setCompoundDrawables(p, null, null, null);
+            a.setPadding(Ui.dp(c, 13), 0, 0, 0);
+        }
+        a.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(c, 48), Ui.dp(c, 48)));
+        a.setContentDescription("Profile. Set your name in Settings.");
+        a.setOnClickListener(v -> host.selectTab(3));
+        return a;
+    }
+
+    private static String shortGreeting() {
+        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        if (h < 5) return "Night";
+        if (h < 12) return "Morning";
+        if (h < 17) return "Afternoon";
+        return "Evening";
     }
 
     private static String greeting() {
@@ -250,7 +351,18 @@ public final class HomePage {
 
         LinearLayout card = Ui.column(c);
         float radius = Ui.dp(c, 28);
-        card.setBackground(Ui.ripple(t, Ui.rounded(t.surfaceContainerHigh, radius), radius));
+        int cardColor = t.homeStyle == EppyTheme.HOME_HEADLINE && t.dark ? t.primaryContainer
+                : t.cardShadow ? t.surfaceContainerLow : t.surfaceContainerHigh;
+        boolean onLight = t.homeStyle == EppyTheme.HOME_HEADLINE && t.dark;
+        if (t.skin.equals(EppyTheme.SKIN_EMBER)) {
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[]{0xFF2A1A16, 0xFF1A1A1D});
+            g.setCornerRadius(radius);
+            card.setBackground(Ui.ripple(t, g, radius));
+        } else {
+            card.setBackground(Ui.ripple(t, Ui.rounded(cardColor, radius), radius));
+        }
+        if (t.cardShadow) card.setElevation(Ui.dp(c, 3));
         card.setPadding(Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16));
         card.setClickable(true);
         card.setFocusable(true);
@@ -267,11 +379,12 @@ public final class HomePage {
 
         LinearLayout info = Ui.column(c);
         info.setPadding(Ui.dp(c, 16), Ui.dp(c, 2), 0, 0);
-        TextView label = Ui.text(c, t, "CONTINUE LISTENING", 11, 600, t.primary);
+        TextView label = Ui.text(c, t, t.homeStyle == EppyTheme.HOME_EXPLORE ? "Book of the day" : "CONTINUE LISTENING",
+                t.homeStyle == EppyTheme.HOME_EXPLORE ? 13 : 11, 600, onLight ? t.onPrimaryContainer : t.progressColor);
         label.setLetterSpacing(0.12f);
         info.addView(label);
         String titleText = hasSession ? p.bookTitle() : resume.title;
-        TextView title = Ui.text(c, t, titleText != null ? titleText : "", 21, 650, t.onSurface);
+        TextView title = Ui.text(c, t, titleText != null ? titleText : "", 21, 650, onLight ? t.onPrimaryContainer : t.onSurface);
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setPadding(0, Ui.dp(c, 8), 0, 0);
@@ -279,7 +392,7 @@ public final class HomePage {
         String ch = hasSession ? p.chapterTitle() : "Tap to resume";
         if (ch != null && ch.equals(titleText)) ch = null;
         if (ch != null) {
-            TextView chapter = Ui.singleLine(Ui.text(c, t, ch, 14, 400, t.onSurfaceVariant));
+            TextView chapter = Ui.singleLine(Ui.text(c, t, ch, 14, 400, onLight ? EppyTheme.withAlpha(t.onPrimaryContainer, 0.7f) : t.onSurfaceVariant));
             chapter.setPadding(0, Ui.dp(c, 6), 0, 0);
             info.addView(chapter);
         }
@@ -293,7 +406,7 @@ public final class HomePage {
         heroProgress.setMax(1000);
         heroProgress.setProgressDrawable(pillProgress());
         progressCol.addView(heroProgress, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 8)));
-        heroMeta = Ui.text(c, t, "", 13, 500, t.onSurfaceVariant);
+        heroMeta = Ui.text(c, t, "", 13, 500, onLight ? EppyTheme.withAlpha(t.onPrimaryContainer, 0.7f) : t.onSurfaceVariant);
         heroMeta.setPadding(0, Ui.dp(c, 8), 0, 0);
         progressCol.addView(heroMeta);
         bottom.addView(progressCol, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -321,8 +434,8 @@ public final class HomePage {
 
     android.graphics.drawable.Drawable pillProgress() {
         float r = Ui.dp(c, 4);
-        android.graphics.drawable.GradientDrawable track = Ui.rounded(t.dark ? t.surfaceContainerHighest : t.secondaryContainer, r);
-        android.graphics.drawable.GradientDrawable fill = Ui.rounded(t.primary, r);
+        android.graphics.drawable.GradientDrawable track = Ui.rounded(t.dark ? t.surfaceContainerHighest : t.surfaceContainerHigh, r);
+        android.graphics.drawable.GradientDrawable fill = Ui.rounded(t.progressColor, r);
         android.graphics.drawable.ClipDrawable clip = new android.graphics.drawable.ClipDrawable(fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL);
         android.graphics.drawable.LayerDrawable ld = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{track, clip});
         ld.setId(0, android.R.id.background);
@@ -386,8 +499,16 @@ public final class HomePage {
     View bookCard(EppyPlayer.Book b, int sizeDp) {
         LinearLayout card = Ui.column(c);
         ImageView cover = Ui.cover(c, t, b.cover, 20);
-        card.addView(cover, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, sizeDp)));
-        TextView title = Ui.text(c, t, b.title, 14, 500, t.onSurface);
+        if (t.cardShadow) cover.setElevation(Ui.dp(c, 4));
+        LinearLayout.LayoutParams cvl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, sizeDp));
+        cvl.setMargins(0, Ui.dp(c, 2), 0, 0);
+        card.addView(cover, cvl);
+        boolean paper = t.skin.equals(EppyTheme.SKIN_PAPER);
+        TextView title = Ui.text(c, t, paper ? b.title.toUpperCase(Locale.ROOT) : b.title, paper ? 12 : 14, paper ? 600 : 500, t.onSurface);
+        if (paper) {
+            title.setLetterSpacing(0.06f);
+            title.setGravity(Gravity.CENTER);
+        }
         title.setMaxLines(2);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         title.setPadding(Ui.dp(c, 2), Ui.dp(c, 8), Ui.dp(c, 2), 0);

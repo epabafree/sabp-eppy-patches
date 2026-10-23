@@ -50,6 +50,14 @@ public final class SettingsPage {
         col.addView(h);
 
         LinearLayout look = group("Appearance");
+        look.addView(label("Style"));
+        look.addView(skinPicker());
+        look.addView(nameField());
+        if (!EppyTheme.SKIN_MATERIAL.equals(t.skin)) {
+            TextView note = Ui.text(c, t, "Theme and accent below apply to the Material You style. Other styles use their own fixed palette.", 13, 400, t.onSurfaceVariant);
+            note.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 8));
+            look.addView(note);
+        }
         look.addView(label("Theme"));
         look.addView(segmented(new String[]{"System", "Light", "Dark", "Black"},
                 new String[]{EppyTheme.MODE_SYSTEM, EppyTheme.MODE_LIGHT, EppyTheme.MODE_DARK, EppyTheme.MODE_BLACK},
@@ -84,7 +92,18 @@ public final class SettingsPage {
         k.setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 16));
         keys.addView(k);
 
-        TextView about = Ui.text(c, t, "Eppy UI · a Morphe patch for Smart AudioBook Player", 12, 400, t.onSurfaceVariant);
+        LinearLayout credits = group("Credits and open source");
+        credit(credits, "Smart AudioBook Player", "The app this interface runs on. Playback, library, bookmarks and settings are all SABP's own. Eppy only adds a new interface on top.");
+        credit(credits, "Hooman's Morphe Patches · github.com/arandomhooman/hoomans-morphe-patches",
+                "GPL-3.0. Eppy is designed to be used together with Hooman's SABP patch, and it's tested on Hooman's SABP 11.7.8 build. Not affiliated with or endorsed by Hooman.");
+        credit(credits, "Morphe patches template · github.com/MorpheApp", "GPL-3.0. Project and build setup. Eppy patches are for use with Morphe and aren't made by the Morphe project.");
+        credit(credits, "Outfit font · github.com/Outfitio/Outfit-Fonts", "© 2021 The Outfit Project Authors · SIL Open Font License 1.1");
+        credit(credits, "Plus Jakarta Sans font · github.com/tokotype/PlusJakartaSans", "© 2020 The Plus Jakarta Sans Project Authors · SIL Open Font License 1.1");
+        credit(credits, "Storyteller · gitlab.com/storyteller-platform/storyteller",
+                "MIT. Not bundled. Read along can use the narration timings (EPUB 3 Media Overlays) in \"readaloud\" EPUBs that Storyteller creates, for exact sync.");
+        credit(credits, "Android speech recognition and PdfRenderer", "Built-in Android APIs. They match narration to text and read PDF text on the device. Nothing is uploaded.");
+
+        TextView about = Ui.text(c, t, "Eppy UI · patches for Smart AudioBook Player, for use with Morphe", 12, 400, t.onSurfaceVariant);
         about.setGravity(Gravity.CENTER);
         about.setPadding(0, Ui.dp(c, 24), 0, 0);
         col.addView(about);
@@ -100,6 +119,97 @@ public final class SettingsPage {
         box.setPadding(0, Ui.dp(c, 8), 0, Ui.dp(c, 8));
         col.addView(box, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return box;
+    }
+
+    /** Style cards: a miniature of each reference design (background, accent, card). */
+    private View skinPicker() {
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(c);
+        hs.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = Ui.row(c);
+        row.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 12));
+        int[][] sw = {
+                {0xFF3B3346, 0xFFD0BCFF, 0xFF4A4458},
+                {0xFF0E0E10, 0xFFEE6A50, 0xFF222226},
+                {0xFF2C2350, 0xFFD5C8FA, 0xFF3A3166},
+                {0xFFF5F1FB, 0xFF8B2BE2, 0xFFFFFFFF},
+                {0xFFF2ECE3, 0xFFD9493E, 0xFFFBF8F3},
+                {0xFFF3F3F3, 0xFFF4C430, 0xFF151515}};
+        for (int i = 0; i < EppyTheme.SKINS.length; i++) {
+            final String skin = EppyTheme.SKINS[i];
+            boolean sel = skin.equals(t.skin);
+            LinearLayout card = Ui.column(c);
+            card.setGravity(Gravity.CENTER_HORIZONTAL);
+            FrameLayout mini = new FrameLayout(c);
+            mini.setBackground(Ui.outlined(sw[i][0], sel ? t.primary : t.outlineVariant, Ui.dp(c, sel ? 3 : 1), Ui.dp(c, 16)));
+            View cardV = new View(c);
+            cardV.setBackground(Ui.rounded(sw[i][2], Ui.dp(c, 6)));
+            FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 30), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+            cl.topMargin = Ui.dp(c, 12);
+            mini.addView(cardV, cl);
+            View dot = new View(c);
+            android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+            d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            d.setColor(sw[i][1]);
+            dot.setBackground(d);
+            FrameLayout.LayoutParams dl = new FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            dl.bottomMargin = Ui.dp(c, 10);
+            mini.addView(dot, dl);
+            card.addView(mini, new LinearLayout.LayoutParams(Ui.dp(c, 76), Ui.dp(c, 96)));
+            TextView name = Ui.text(c, t, EppyTheme.SKIN_NAMES[i], 12, sel ? 650 : 500, sel ? t.onSurface : t.onSurfaceVariant);
+            name.setPadding(0, Ui.dp(c, 6), 0, 0);
+            card.addView(name);
+            card.setClickable(true);
+            card.setFocusable(true);
+            card.setContentDescription(EppyTheme.SKIN_NAMES[i] + " style" + (sel ? ", selected" : ""));
+            card.setOnClickListener(v -> {
+                Ui.haptic(v, t);
+                prefs().edit().putString("skin", skin).apply();
+                host.rebuild();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = Ui.dp(c, 10);
+            row.addView(card, lp);
+        }
+        hs.addView(row);
+        return hs;
+    }
+
+    private View nameField() {
+        android.widget.EditText e = new android.widget.EditText(c);
+        e.setHint("Your name (for the greeting)");
+        e.setText(t.userName);
+        e.setSingleLine(true);
+        e.setTextColor(t.onSurface);
+        e.setHintTextColor(t.onSurfaceVariant);
+        e.setTypeface(EppyTheme.font(c, 400));
+        e.setBackground(Ui.rounded(t.surfaceContainerHigh, Ui.dp(c, 16)));
+        e.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), 0);
+        e.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        e.setOnEditorActionListener((v, a, ev) -> {
+            prefs().edit().putString("name", v.getText().toString().trim()).apply();
+            host.rebuild();
+            return true;
+        });
+        e.setOnFocusChangeListener((v, has) -> {
+            if (!has) prefs().edit().putString("name", e.getText().toString().trim()).apply();
+        });
+        LinearLayout wrap = Ui.column(c);
+        wrap.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 8));
+        wrap.addView(e, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(c, 52)));
+        return wrap;
+    }
+
+    private void credit(LinearLayout box, String title, String body) {
+        LinearLayout item = Ui.column(c);
+        item.setPadding(Ui.dp(c, 16), Ui.dp(c, 10), Ui.dp(c, 16), Ui.dp(c, 10));
+        item.addView(Ui.text(c, t, title, 14, 600, t.onSurface));
+        TextView b = Ui.text(c, t, body, 13, 400, t.onSurfaceVariant);
+        b.setPadding(0, Ui.dp(c, 4), 0, 0);
+        b.setLineSpacing(Ui.dp(c, 2), 1f);
+        item.addView(b);
+        item.setFocusable(true);
+        item.setContentDescription(title + ". " + body);
+        box.addView(item);
     }
 
     private TextView label(String s) {

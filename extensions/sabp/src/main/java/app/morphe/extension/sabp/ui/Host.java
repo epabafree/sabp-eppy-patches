@@ -30,4 +30,16 @@ public interface Host {
     void rebuild();
 
     void playBook(EppyPlayer.Book book, boolean openPlayer);
+
+    /** 0 = toggle a bookmark at this moment, 1 = toggle one at the start of this chapter. */
+    void bookmarkAction(int kind);
+
+    /** Shows a short message with an Undo action. */
+    void showUndo(String message, Runnable undo);
+
+    /** Opens the system picker for an EPUB/PDF to pair with the playing book. */
+    void pickDocument();
+
+    /** Explains and requests the permission Android's speech service needs, then runs action. */
+    void ensureSpeechPermission(Runnable action);
 }

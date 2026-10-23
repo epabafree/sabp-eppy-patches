@@ -1,0 +1,460 @@
+package app.morphe.extension.sabp.ui;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Typeface;
+import android.graphics.pdf.PdfRenderer;
+import android.net.Uri;
+import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.util.LruCache;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AbsListView;
+import android.widget.BaseAdapter;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import app.morphe.extension.sabp.EppyPlayer;
+import app.morphe.extension.sabp.EppyTheme;
+import app.morphe.extension.sabp.read.BookText;
+import app.morphe.extension.sabp.read.ReadAlong;
+
+/**
+ * Read along: the paired EPUB/PDF follows the narration. The highlight is honest about accuracy:
+ * the current sentence is emphasised only when the position comes from matched audio or exact
+ * book timings; when it's an estimate the whole paragraph gets a soft highlight instead.
+ */
+public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
+    private final Host host;
+    private final Context c;
+    private final EppyTheme t;
+    private final ReadAlong ra;
+    private final FrameLayout root;
+    private final LinearLayout statusBar;
+    private final View statusDot;
+    private final TextView statusText;
+    private final LinearLayout actions;
+    private final ListView list;
+    private final LinearLayout empty;
+    private final TextView backToCurrent;
+    private BookText text;
+    private int unit = -1;       // current word (or page)
+    private int[] sentence = {-1, -1};
+    private long userScrolledAt;
+    private float textSp;
+    private PdfPages pdf;
+
+    public ReadTab(Host host, EppyTheme t) {
+        this.host = host;
+        this.c = host.activity();
+        this.t = t;
+        this.ra = ReadAlong.get(c);
+        textSp = EppyTheme.prefs(c).getFloat("readSize", 18f);
+        root = new FrameLayout(c);
+        LinearLayout col = Ui.column(c);
+        root.addView(col);
+
+        statusBar = Ui.row(c);
+        statusBar.setPadding(Ui.dp(c, 20), Ui.dp(c, 2), Ui.dp(c, 16), Ui.dp(c, 6));
+        statusDot = new View(c);
+        statusBar.addView(statusDot, new LinearLayout.LayoutParams(Ui.dp(c, 8), Ui.dp(c, 8)));
+        statusText = Ui.text(c, t, "", 12, 500, t.onSurfaceVariant);
+        statusText.setPadding(Ui.dp(c, 8), 0, 0, 0);
+        statusText.setMaxLines(2);
+        statusBar.addView(statusText, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        statusBar.addView(Ui.iconButton(c, t, EppyIcon.MORE, t.onSurfaceVariant, 0, "Read along options", v -> options()));
+        col.addView(statusBar);
+
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(c);
+        hs.setHorizontalScrollBarEnabled(false);
+        actions = Ui.row(c);
+        actions.setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 6));
+        hs.addView(actions);
+        col.addView(hs);
+
+        list = SheetTabs.list(c);
+        list.setPadding(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 120));
+        list.setAdapter(adapter);
+        list.setOnScrollListener(new AbsListView.OnScrollListener() {
+            public void onScrollStateChanged(AbsListView v, int state) {
+                if (state == SCROLL_STATE_TOUCH_SCROLL) userScrolledAt = SystemClock.elapsedRealtime();
+            }
+
+            public void onScroll(AbsListView v, int a, int b, int n) {
+            }
+        });
+        list.setOnItemClickListener((p, v, pos, id) -> jumpToPara(pos));
+        list.setOnItemLongClickListener((p, v, pos, id) -> {
+            paraSheet(pos);
+            return true;
+        });
+        col.addView(list, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        empty = Ui.column(c);
+        empty.setGravity(Gravity.CENTER_HORIZONTAL);
+        empty.setPadding(Ui.dp(c, 32), Ui.dp(c, 24), Ui.dp(c, 32), Ui.dp(c, 24));
+        root.addView(empty, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        backToCurrent = Ui.text(c, t, "Back to now", 14, 600, t.onPrimary);
+        backToCurrent.setBackground(Ui.ripple(t, Ui.rounded(t.primary, Ui.dp(c, 20)), Ui.dp(c, 20)));
+        backToCurrent.setPadding(Ui.dp(c, 20), Ui.dp(c, 10), Ui.dp(c, 20), Ui.dp(c, 10));
+        backToCurrent.setVisibility(View.GONE);
+        backToCurrent.setOnClickListener(v -> {
+            userScrolledAt = 0;
+            follow(true);
+        });
+        FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        bl.bottomMargin = Ui.dp(c, 72);
+        root.addView(backToCurrent, bl);
+        ra.addListener(this);
+    }
+
+    @Override
+    public View view() {
+        return root;
+    }
+
+    @Override
+    public void onReadAlongChanged() {
+        rebuild();
+    }
+
+    private void rebuild() {
+        BookText nt = ra.text();
+        if (nt != text) {
+            text = nt;
+            pdf = null;
+            if (text != null && text.pagesOnly && ra.docUri() != null) pdf = new PdfPages(c, Uri.parse(ra.docUri()));
+            unit = -1;
+            adapter.notifyDataSetChanged();
+        }
+        ReadAlong.State s = ra.state();
+        boolean showText = text != null && s != ReadAlong.State.ERROR;
+        list.setVisibility(showText ? View.VISIBLE : View.GONE);
+        empty.setVisibility(showText ? View.GONE : View.VISIBLE);
+        statusBar.setVisibility(s == ReadAlong.State.NONE ? View.GONE : View.VISIBLE);
+        int dot;
+        switch (s) {
+            case EXACT:
+            case SYNCED:
+                dot = t.primary;
+                break;
+            case MATCHING:
+            case LOADING:
+                dot = t.tertiary;
+                break;
+            case ERROR:
+                dot = 0xFFE5484D;
+                break;
+            default:
+                dot = t.outline;
+        }
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        d.setColor(dot);
+        statusDot.setBackground(d);
+        String label;
+        switch (s) {
+            case EXACT:
+                label = "Exact sync";
+                break;
+            case SYNCED:
+                label = "Matched";
+                break;
+            case MATCHING:
+                label = "Matching…";
+                break;
+            case LOADING:
+                label = "Loading";
+                break;
+            case ERROR:
+                label = "Problem";
+                break;
+            default:
+                label = "Estimated";
+        }
+        statusText.setText(label + (ra.message().isEmpty() ? "" : " · " + ra.message()));
+        statusText.setContentDescription("Read along status: " + statusText.getText());
+
+        actions.removeAllViews();
+        if (showText && !text.pagesOnly && s != ReadAlong.State.EXACT) {
+            actions.addView(Ui.chip(c, t, EppyIcon.HEADPHONES, s == ReadAlong.State.MATCHING ? "Matching…" : "Match now", false,
+                    v -> host.ensureSpeechPermission(() -> ra.matchNow(host.player().bookPositionSeconds()))));
+            actions.addView(Ui.space(c, 8, 1));
+        }
+        if (showText) {
+            actions.addView(Ui.chip(c, t, 0, "A–", false, v -> setSize(textSp - 2)));
+            actions.addView(Ui.space(c, 8, 1));
+            actions.addView(Ui.chip(c, t, 0, "A+", false, v -> setSize(textSp + 2)));
+        }
+
+        empty.removeAllViews();
+        if (!showText) {
+            ImageView iv = new ImageView(c);
+            iv.setImageDrawable(new EppyIcon(EppyIcon.LIBRARY, t.primary));
+            empty.addView(iv, new LinearLayout.LayoutParams(Ui.dp(c, 48), Ui.dp(c, 48)));
+            TextView h = Ui.text(c, t, s == ReadAlong.State.ERROR ? "Couldn't use that file" : "Read along with the book", 19, 650, t.onSurface);
+            h.setGravity(Gravity.CENTER);
+            h.setPadding(0, Ui.dp(c, 16), 0, Ui.dp(c, 8));
+            empty.addView(h);
+            TextView p = Ui.text(c, t, s == ReadAlong.State.ERROR ? ra.message()
+                    : s == ReadAlong.State.LOADING ? ra.message()
+                    : "Pair an EPUB or PDF of this book. Eppy reads the text on your phone and matches it to the narration by listening to a few short clips with Android's offline speech recogniser. Nothing is uploaded.",
+                    14, 400, t.onSurfaceVariant);
+            p.setGravity(Gravity.CENTER);
+            p.setLineSpacing(Ui.dp(c, 3), 1f);
+            empty.addView(p);
+            if (s != ReadAlong.State.LOADING) {
+                TextView btn = Ui.text(c, t, s == ReadAlong.State.ERROR ? "Choose another file" : "Choose EPUB or PDF", 15, 600, t.onPrimary);
+                btn.setGravity(Gravity.CENTER);
+                btn.setPadding(Ui.dp(c, 24), 0, Ui.dp(c, 24), 0);
+                btn.setBackground(Ui.ripple(t, Ui.rounded(t.primary, Ui.dp(c, 24)), Ui.dp(c, 24)));
+                btn.setOnClickListener(v -> host.pickDocument());
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(c, 48));
+                lp.topMargin = Ui.dp(c, 20);
+                empty.addView(btn, lp);
+            }
+        }
+        refresh(false);
+    }
+
+    private void setSize(float sp) {
+        textSp = Math.max(13f, Math.min(34f, sp));
+        EppyTheme.prefs(c).edit().putFloat("readSize", textSp).apply();
+        adapter.notifyDataSetChanged();
+    }
+
+    @Override
+    public void refresh(boolean full) {
+        if (full) {
+            EppyPlayer p = host.player();
+            if (p.book() != null) ra.openBook(p.book().folderUri);
+            rebuild();
+            return;
+        }
+        if (text == null) return;
+        double pos = host.player().bookPositionSeconds();
+        if (pos < 0) return;
+        int u = ra.unitAt(pos);
+        if (u != unit) {
+            int oldPara = unit >= 0 ? paraOf(unit) : -1;
+            unit = u;
+            sentence = text.pagesOnly ? new int[]{u, u} : text.sentence(u);
+            int newPara = paraOf(u);
+            updateRow(oldPara);
+            updateRow(newPara);
+            if (oldPara != newPara) follow(false);
+        }
+        boolean away = SystemClock.elapsedRealtime() - userScrolledAt < 8000 && !isVisible(paraOf(unit));
+        backToCurrent.setVisibility(away ? View.VISIBLE : View.GONE);
+    }
+
+    private int paraOf(int u) {
+        if (text == null) return 0;
+        return text.pagesOnly ? Math.max(0, Math.min(text.paras.size() - 1, u)) : text.paraOfWord(u);
+    }
+
+    private boolean isVisible(int para) {
+        return para >= list.getFirstVisiblePosition() && para <= list.getLastVisiblePosition();
+    }
+
+    private void follow(boolean force) {
+        if (text == null || unit < 0) return;
+        if (!force && SystemClock.elapsedRealtime() - userScrolledAt < 8000) return;
+        int para = paraOf(unit);
+        if (t.reduceMotion || force) list.setSelectionFromTop(para, list.getHeight() / 4);
+        else list.smoothScrollToPositionFromTop(para, list.getHeight() / 4, 300);
+    }
+
+    private void updateRow(int para) {
+        if (para < 0) return;
+        View row = list.getChildAt(para - list.getFirstVisiblePosition());
+        if (row instanceof TextView) bindText((TextView) row, para);
+    }
+
+    private boolean precise() {
+        ReadAlong.State s = ra.state();
+        return s == ReadAlong.State.EXACT || s == ReadAlong.State.SYNCED;
+    }
+
+    private void bindText(TextView tv, int pos) {
+        BookText.Para para = text.paras.get(pos);
+        boolean current = unit >= 0 && paraOf(unit) == pos;
+        boolean past = unit >= 0 && pos < paraOf(unit);
+        int base = past ? EppyTheme.withAlpha(t.onSurface, 0.45f) : t.onSurface;
+        tv.setTextColor(current ? t.onSurface : base);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, para.heading ? textSp + 4 : textSp);
+        tv.setTypeface(EppyTheme.font(c, para.heading ? 650 : 400));
+        if (current && !precise()) {
+            // Estimate only: highlight the paragraph, not a sentence we can't vouch for.
+            tv.setBackground(Ui.rounded(EppyTheme.withAlpha(t.primary, 0.10f), Ui.dp(c, 12)));
+            tv.setText(para.text);
+        } else if (current && para.wordCount > 0) {
+            tv.setBackground(null);
+            SpannableString s = new SpannableString(para.text);
+            int a = Math.max(para.firstWord, sentence[0]), b = Math.min(para.firstWord + para.wordCount - 1, sentence[1]);
+            if (a <= b) {
+                int from = text.wordStart[a], to = text.wordEnd[b];
+                to = extendToPunctuation(para.text, to);
+                s.setSpan(new ForegroundColorSpan(t.onSurface), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                s.setSpan(new BackgroundColorSpan(EppyTheme.withAlpha(t.primary, 0.18f)), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                s.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), from, to, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (from > 0) s.setSpan(new ForegroundColorSpan(EppyTheme.withAlpha(t.onSurface, 0.55f)), 0, from, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (to < para.text.length()) s.setSpan(new ForegroundColorSpan(EppyTheme.withAlpha(t.onSurface, 0.75f)), to, para.text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            tv.setText(s);
+        } else {
+            tv.setBackground(null);
+            tv.setText(para.text);
+        }
+    }
+
+    private static int extendToPunctuation(String s, int to) {
+        while (to < s.length() && ".,!?;:”’\"')".indexOf(s.charAt(to)) >= 0) to++;
+        return to;
+    }
+
+    private void jumpToPara(int pos) {
+        if (text == null) return;
+        int u = text.pagesOnly ? pos : text.paras.get(pos).firstWord;
+        double sec = ra.timeOfUnit(u);
+        if (host.player().jumpToBook(sec)) {
+            userScrolledAt = 0;
+            if (!precise()) Toast.makeText(c, "Jumped to the estimated spot. Long-press a paragraph to correct it.", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(c, "Couldn't jump: the book's length isn't known yet", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void paraSheet(int pos) {
+        new Sheet(host.overlayRoot(), t, null)
+                .item(EppyIcon.CHECK, "I'm hearing this now", "Corrects the sync to this " + (text.pagesOnly ? "page" : "paragraph"), () -> {
+                    int u = text.pagesOnly ? pos : text.paras.get(pos).firstWord;
+                    ra.syncHere(u, host.player().bookPositionSeconds());
+                    unit = -1;
+                    refresh(false);
+                })
+                .item(EppyIcon.PLAY, "Play from here", precise() ? null : "Estimated position", () -> jumpToPara(pos))
+                .show();
+    }
+
+    private void options() {
+        Sheet s = new Sheet(host.overlayRoot(), t, ra.docName());
+        s.item(EppyIcon.FOLDER, "Pair a different file", null, host::pickDocument);
+        if (ra.speechSupported()) {
+            s.item(EppyIcon.HEADPHONES, ra.autoSyncEnabled() ? "Turn off automatic matching" : "Turn on automatic matching",
+                    "Listens to a 12-second clip about every 90 s while playing, on-device", () -> ra.setAutoSync(!ra.autoSyncEnabled()));
+        }
+        s.item(EppyIcon.HISTORY, "Forget matches", "Keep the file, start syncing again", ra::clearMatches);
+        s.item(EppyIcon.CLOSE, "Unpair file", "Removes the link; the file itself is untouched", ra::unpair);
+        s.show();
+    }
+
+    private final BaseAdapter adapter = new BaseAdapter() {
+        public int getCount() {
+            return text != null ? text.paras.size() : 0;
+        }
+
+        public Object getItem(int i) {
+            return text.paras.get(i);
+        }
+
+        public long getItemId(int i) {
+            return i;
+        }
+
+        @Override
+        public int getViewTypeCount() {
+            return 2;
+        }
+
+        @Override
+        public int getItemViewType(int i) {
+            return text != null && text.pagesOnly ? 1 : 0;
+        }
+
+        public View getView(int i, View convert, ViewGroup parent) {
+            if (text.pagesOnly) return pageView(i, convert);
+            TextView tv = convert instanceof TextView ? (TextView) convert : new TextView(c);
+            tv.setPadding(Ui.dp(c, 12), Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 8));
+            tv.setLineSpacing(0, 1.35f);
+            tv.setIncludeFontPadding(false);
+            bindText(tv, i);
+            return tv;
+        }
+    };
+
+    private View pageView(int i, View convert) {
+        ImageView iv = convert instanceof ImageView ? (ImageView) convert : new ImageView(c);
+        iv.setAdjustViewBounds(true);
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        int pad = Ui.dp(c, 6);
+        iv.setPadding(pad, pad, pad, pad);
+        boolean cur = unit >= 0 && paraOf(unit) == i;
+        iv.setBackground(Ui.outlined(0xFFFFFFFF, cur ? t.primary : t.outlineVariant, Ui.dp(c, cur ? 3 : 1), Ui.dp(c, 8)));
+        iv.setContentDescription("Page " + (i + 1) + (cur ? ", current (estimated)" : ""));
+        iv.setImageBitmap(null);
+        iv.setMinimumHeight(Ui.dp(c, 300));
+        iv.setTag(i);
+        if (pdf != null) pdf.render(i, list.getWidth() - Ui.dp(c, 36), bmp -> {
+            if (Integer.valueOf(i).equals(iv.getTag())) iv.setImageBitmap(bmp);
+        });
+        return iv;
+    }
+
+    /** Renders PDF pages (for PDFs without a text layer or on Android < 15). */
+    static final class PdfPages {
+        interface Done {
+            void done(Bitmap b);
+        }
+
+        private final Context c;
+        private final Uri uri;
+        private final LruCache<Integer, Bitmap> cache = new LruCache<Integer, Bitmap>(24 * 1024 * 1024) {
+            @Override
+            protected int sizeOf(Integer k, Bitmap b) {
+                return b.getByteCount();
+            }
+        };
+        private final java.util.concurrent.ExecutorService exec = java.util.concurrent.Executors.newSingleThreadExecutor();
+
+        PdfPages(Context c, Uri uri) {
+            this.c = c;
+            this.uri = uri;
+        }
+
+        void render(int page, int width, Done done) {
+            Bitmap hit = cache.get(page);
+            if (hit != null) {
+                done.done(hit);
+                return;
+            }
+            final int w = Math.max(200, width);
+            exec.execute(() -> {
+                try (ParcelFileDescriptor pfd = c.getContentResolver().openFileDescriptor(uri, "r");
+                     PdfRenderer r = new PdfRenderer(pfd);
+                     PdfRenderer.Page p = r.openPage(page)) {
+                    int h = Math.round(w * (p.getHeight() / (float) p.getWidth()));
+                    Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                    b.eraseColor(0xFFFFFFFF);
+                    p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                    cache.put(page, b);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> done.done(b));
+                } catch (Throwable ignored) {
+                }
+            });
+        }
+    }
+}

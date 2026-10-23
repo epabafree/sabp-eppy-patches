@@ -27,6 +27,7 @@ import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
+import app.morphe.extension.sabp.read.ReadAlong;
 import app.morphe.extension.sabp.ui.EppyIcon;
 import app.morphe.extension.sabp.ui.HomePage;
 import app.morphe.extension.sabp.ui.Host;
@@ -167,6 +168,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
             Sheet.current.dismiss();
             return;
         }
+        if (overlayPane != null && overlayPane.onBack()) return;
+        if (sidePane != null && sidePane.onBack()) return;
         if (playerOpen && overlayPane != null) {
             closePlayer();
             return;
@@ -190,11 +193,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
 
     private void build() {
         theme = EppyTheme.resolve(this, coverSeed);
+        theme.activateFont();
         widthClass = widthClass();
         Sheet.current = null;
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(theme.surface);
+        root.setBackground(theme.background());
         getWindow().getDecorView().setBackgroundColor(theme.surface);
 
         LinearLayout frame = new LinearLayout(this);
@@ -209,7 +213,8 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         LinearLayout contentCol = Ui.column(this);
         pages = new FrameLayout(this);
         contentCol.addView(pages, Ui.lp(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        if (widthClass == 0) {
+        boolean floatingNav = widthClass == 0 && theme.navStyle != EppyTheme.NAV_BAR;
+        if (widthClass == 0 && !floatingNav) {
             navContainer = bottomNav();
             contentCol.addView(navContainer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
@@ -225,6 +230,13 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         sidePane = null;
         overlayPane = null;
         miniPlayer = null;
+        if (floatingNav) {
+            navContainer = floatingNav();
+            FrameLayout.LayoutParams nl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 68),
+                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            nl.bottomMargin = Ui.dp(this, 14);
+            root.addView(navContainer, nl);
+        }
         if (widthClass == 2) {
             // Two-pane: persistent Now Playing on the right.
             sidePane = new PlayerPane(this, true);
@@ -237,13 +249,13 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
             pl.setMargins(0, Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12));
             frame.addView(paneWrap, pl);
             sidePane.layoutCover(paneW);
-            sidePane.root.setBackgroundColor(theme.surfaceContainerLow);
             playerOpen = false;
         } else {
             miniPlayer = buildMiniPlayer();
             FrameLayout.LayoutParams ml = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 64), Gravity.BOTTOM);
             int side = Ui.dp(this, 12);
-            ml.setMargins(side + (widthClass == 1 ? Ui.dp(this, 88) : 0), 0, side, (widthClass == 0 ? Ui.dp(this, 80) : 0) + Ui.dp(this, 12));
+            int navSpace = widthClass == 0 ? (floatingNav ? Ui.dp(this, 82) : Ui.dp(this, 80)) : 0;
+            ml.setMargins(side + (widthClass == 1 ? Ui.dp(this, 88) : 0), 0, side, navSpace + Ui.dp(this, 12));
             if (widthClass == 1) {
                 ml.width = Math.min(Ui.dp(this, 560), getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 112));
                 ml.gravity = Gravity.BOTTOM | Gravity.END;
@@ -339,10 +351,180 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         return item;
     }
 
+    /** Floating capsule navigation (Ember, Lavender, Mono reference designs). */
+    private LinearLayout floatingNav() {
+        LinearLayout bar = Ui.row(this);
+        bar.setGravity(Gravity.CENTER);
+        bar.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+        float r = Ui.dp(this, theme.navStyle == EppyTheme.NAV_PILL_DARK ? 34 : 24);
+        bar.setBackground(Ui.rounded(theme.navBg, r));
+        bar.setElevation(Ui.dp(this, 10));
+        for (int i = 0; i < TAB_LABELS.length; i++) {
+            final int index = i;
+            boolean sel = i == tab;
+            FrameLayout item = new FrameLayout(this);
+            int size = Ui.dp(this, sel && theme.navStyle == EppyTheme.NAV_PILL_DARK ? 60 : 52);
+            float ir = theme.navStyle == EppyTheme.NAV_PILL_DARK || theme.skin.equals(EppyTheme.SKIN_LAVENDER) ? size / 2f : Ui.dp(this, 16);
+            item.setBackground(Ui.ripple(theme, Ui.rounded(sel ? theme.navSelectedBg : 0, ir), ir));
+            ImageView iv = new ImageView(this);
+            iv.setImageDrawable(new EppyIcon(TAB_ICONS[i], sel ? theme.navSelectedFg : theme.onSurfaceVariant));
+            item.addView(iv, new FrameLayout.LayoutParams(Ui.dp(this, 24), Ui.dp(this, 24), Gravity.CENTER));
+            item.setClickable(true);
+            item.setFocusable(true);
+            item.setContentDescription(TAB_LABELS[i] + (sel ? ", selected" : ""));
+            item.setOnClickListener(v -> {
+                Ui.haptic(v, theme);
+                selectTab(index);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.leftMargin = Ui.dp(this, 4);
+            lp.rightMargin = Ui.dp(this, 4);
+            bar.addView(item, lp);
+        }
+        return bar;
+    }
+
+    @Override
+    public void bookmarkAction(int kind) {
+        EppyBook b = player.book();
+        if (b == null) {
+            Toast.makeText(this, "Start a book first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String file;
+        int pos;
+        String title;
+        double fp = player.filePositionSeconds();
+        if (kind == 1) {
+            int idx = b.chapterIndexAt((int) player.bookPositionSeconds(), (int) fp);
+            if (idx < 0) return;
+            EppyBook.ChapterItem ch = b.chapters.get(idx);
+            file = ch.fileName;
+            pos = ch.positionInFile;
+            title = "Chapter: " + ch.title;
+        } else {
+            if (fp < 0) {
+                Toast.makeText(this, "Position not available yet", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            file = b.currentFile;
+            pos = (int) fp;
+            String ch = player.chapterTitle();
+            title = ch != null ? ch : "";
+        }
+        EppyBookmarks bm = EppyBookmarks.get(this);
+        bm.sync(b.folderUri, false);
+        boolean added = bm.toggle(b.folderUri, file, pos, title, null);
+        String msg = added ? (kind == 1 ? "Chapter bookmarked" : "Bookmark added at " + Ui.time(pos * 1000L)) : "Bookmark removed";
+        root.announceForAccessibility(msg);
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+    }
+
+    private View undoBar;
+
+    @Override
+    public void showUndo(String message, Runnable undo) {
+        if (undoBar != null) root.removeView(undoBar);
+        LinearLayout bar = Ui.row(this);
+        bar.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 8), 0);
+        int inverse = theme.dark ? 0xFFE6E1E5 : 0xFF313033;
+        int onInverse = theme.dark ? 0xFF313033 : 0xFFF4EFF4;
+        bar.setBackground(Ui.rounded(inverse, Ui.dp(this, 8)));
+        bar.setElevation(Ui.dp(this, 12));
+        bar.addView(Ui.text(this, theme, message, 14, 500, onInverse), Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView action = Ui.text(this, theme, "Undo", 14, 650, theme.dark ? theme.onPrimaryContainer : theme.primaryContainer);
+        action.setPadding(Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12));
+        bar.addView(action);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 52), Gravity.BOTTOM);
+        lp.setMargins(Ui.dp(this, 12), 0, Ui.dp(this, 12), Ui.dp(this, 100));
+        root.addView(bar, lp);
+        undoBar = bar;
+        root.announceForAccessibility(message);
+        Runnable hide = () -> {
+            if (undoBar == bar) {
+                root.removeView(bar);
+                undoBar = null;
+            }
+        };
+        action.setOnClickListener(v -> {
+            undo.run();
+            hide.run();
+        });
+        handler.postDelayed(hide, 6000);
+    }
+
+    private static final int REQ_DOC = 4711;
+
+    @Override
+    public void pickDocument() {
+        if (player.book() == null) {
+            Toast.makeText(this, "Start the audiobook first, then pair its EPUB or PDF", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/epub+zip", "application/pdf", "application/octet-stream"});
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(i, REQ_DOC);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "No file picker available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_DOC && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            EppyBook b = player.book();
+            if (b != null) {
+                ReadAlong ra = ReadAlong.get(this);
+                ra.openBook(b.folderUri);
+                ra.pair(data.getData());
+                if (ra.speechSupported() && !ra.speechPermitted()) ensureSpeechPermission(ra::retryTracking);
+                if (overlayPane != null) overlayPane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
+                else if (sidePane != null) sidePane.showSheet(app.morphe.extension.sabp.ui.PlayerSheet.TAB_READ);
+            }
+        }
+    }
+
+    private Runnable pendingSpeechAction;
+    private static final int REQ_MIC = 4712;
+
+    @Override
+    public void ensureSpeechPermission(Runnable action) {
+        ReadAlong ra = ReadAlong.get(this);
+        if (!ra.speechSupported() || ra.speechPermitted()) {
+            action.run();
+            return;
+        }
+        new Sheet(root, theme, "Match narration to text")
+                .item(EppyIcon.HEADPHONES, "Allow speech matching",
+                        "Read along feeds short clips of the audiobook file to Android's offline speech recogniser. Android requires the microphone permission for that service, but your microphone is never used and nothing leaves your phone.",
+                        () -> {
+                            pendingSpeechAction = action;
+                            requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+                        })
+                .item(EppyIcon.CLOSE, "Not now", "You can still sync by long-pressing the paragraph you hear", null)
+                .show();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_MIC) {
+            Runnable a = pendingSpeechAction;
+            pendingSpeechAction = null;
+            if (results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED && a != null) a.run();
+        }
+    }
+
     private View buildMiniPlayer() {
         FrameLayout wrap = new FrameLayout(this);
         float r = Ui.dp(this, 20);
-        wrap.setBackground(Ui.ripple(theme, Ui.rounded(theme.surfaceContainerHighest, r), r));
+        wrap.setBackground(Ui.ripple(theme, Ui.rounded(theme.cardShadow ? theme.surfaceContainerLow : theme.surfaceContainerHighest, r), r));
         wrap.setElevation(Ui.dp(this, 6));
         Ui.clip(wrap, r);
         LinearLayout row = Ui.row(this);
@@ -402,7 +584,7 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
         int idx = parent.indexOfChild(navContainer);
         ViewGroup.LayoutParams lp = navContainer.getLayoutParams();
         parent.removeView(navContainer);
-        navContainer = widthClass == 0 ? bottomNav() : navRail();
+        navContainer = widthClass > 0 ? navRail() : theme.navStyle != EppyTheme.NAV_BAR ? floatingNav() : bottomNav();
         parent.addView(navContainer, idx, lp);
         View page = t == TAB_HOME ? home.root : t == TAB_LIBRARY ? library.root : settings.root;
         showTab(t);
@@ -526,6 +708,12 @@ public class EppyActivity extends Activity implements Host, EppyPlayer.Listener 
     }
 
     private void tick() {
+        EppyBook b = player.book();
+        if (b != null) {
+            ReadAlong ra = ReadAlong.get(this);
+            ra.openBook(b.folderUri);
+            ra.tick(player.bookPositionSeconds(), player.isPlaying());
+        }
         if (overlayPane != null) overlayPane.update(false);
         if (sidePane != null) sidePane.update(false);
         if (home != null && tab == TAB_HOME) home.tick();

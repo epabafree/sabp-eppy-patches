@@ -44,9 +44,9 @@ public class EppySlider extends View {
     }
 
     public void apply(EppyTheme t, boolean waveform) {
-        active.setColor(t.primary);
+        active.setColor(t.progressColor != 0 ? t.progressColor : t.primary);
         inactive.setColor(t.dark ? t.surfaceContainerHighest : t.secondaryContainer);
-        thumb.setColor(t.primary);
+        thumb.setColor(t.progressColor != 0 ? t.progressColor : t.primary);
         this.waveform = waveform;
         invalidate();
     }

@@ -36,6 +36,27 @@ public final class EppyTheme {
     public int onSurface, onSurfaceVariant, outline, outlineVariant, scrim;
     public boolean dark;
 
+    // Skin (reference-design look). "material" = Material You.
+    public static final String SKIN_MATERIAL = "material", SKIN_EMBER = "ember", SKIN_MIDNIGHT = "midnight",
+            SKIN_LAVENDER = "lavender", SKIN_PAPER = "paper", SKIN_MONO = "mono";
+    public static final String[] SKINS = {SKIN_MATERIAL, SKIN_EMBER, SKIN_MIDNIGHT, SKIN_LAVENDER, SKIN_PAPER, SKIN_MONO};
+    public static final String[] SKIN_NAMES = {"Material You", "Ember", "Midnight", "Lavender", "Paper", "Mono"};
+    public static final int NAV_BAR = 0, NAV_FLOATING = 1, NAV_PILL_DARK = 2;
+    public static final int PLAYER_GLOW = 0, PLAYER_RING = 1, PLAYER_CARD = 2, PLAYER_TRANSCRIPT = 3;
+    public static final int HOME_GREETING = 0, HOME_HEADLINE = 1, HOME_EXPLORE = 2;
+    public String skin = SKIN_MATERIAL;
+    public int playShape = 0; // PlayButton.SHAPE_*
+    public int navStyle = NAV_BAR;
+    public int playerStyle = PLAYER_GLOW;
+    public int homeStyle = HOME_GREETING;
+    public boolean cardShadow;
+    public int progressColor;   // seek bar / progress fill
+    public int gradientTop, gradientBottom; // 0 = flat surface
+    public int navSelectedBg, navSelectedFg, navBg;
+    public String fontAsset = "fonts/eppy_outfit.ttf";
+    public String userName = "";
+    private EppyTheme playerTheme;
+
     // Preferences.
     public String mode;
     public String accentSource;
@@ -46,7 +67,13 @@ public final class EppyTheme {
     public boolean waveformSeekBar;
 
     private static Typeface baseFont;
-    private static final HashMap<Integer, Typeface> fontCache = new HashMap<>();
+    private static final HashMap<String, Typeface> fontCache = new HashMap<>();
+    private static String currentFont = "fonts/eppy_outfit.ttf";
+
+    /** Selects the font file used by {@link #font}; called when a theme is applied. */
+    public void activateFont() {
+        currentFont = fontAsset;
+    }
 
     private EppyTheme() {
     }
@@ -65,7 +92,8 @@ public final class EppyTheme {
         t.reduceMotion = p.getBoolean("reduceMotion", systemReducedMotion(c));
         t.haptics = p.getBoolean("haptics", true);
         t.highContrast = p.getBoolean("highContrast", false);
-        t.waveformSeekBar = p.getBoolean("waveform", false);
+        t.skin = p.getString("skin", configString(c, "eppy_default_skin", SKIN_MATERIAL));
+        t.userName = p.getString("name", "");
 
         boolean systemDark = (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
                 == Configuration.UI_MODE_NIGHT_YES;
@@ -84,10 +112,153 @@ public final class EppyTheme {
             seed = 0;
         }
 
+        if (!SKIN_MATERIAL.equals(t.skin) && t.applySkin(c, coverSeed)) {
+            t.waveformSeekBar = p.getBoolean("waveform", t.waveformSeekBar);
+            t.enforceContrast();
+            t.derivePlayerTheme();
+            return t;
+        }
+        t.skin = SKIN_MATERIAL;
+        t.waveformSeekBar = p.getBoolean("waveform", false);
         if (dynamic) t.fromSystem(c, black);
         else t.fromSeed(seed, black);
+        t.progressColor = t.primary;
+        t.navBg = t.surfaceContainer;
+        t.navSelectedBg = t.secondaryContainer;
+        t.navSelectedFg = t.onSecondaryContainer;
         t.enforceContrast();
+        t.derivePlayerTheme();
         return t;
+    }
+
+    /** Fixed palettes and layout choices that recreate the reference designs. */
+    private boolean applySkin(Context c, int coverSeed) {
+        scrim = 0x99000000;
+        switch (skin) {
+            case SKIN_EMBER:
+                dark = true;
+                set(0xFF0E0E10, 0xFF0A0A0B, 0xFF141416, 0xFF1A1A1D, 0xFF222226, 0xFF2B2B30);
+                onSurface = 0xFFF5F5F5; onSurfaceVariant = 0xFFA3A3AB; outline = 0xFF5A5A62; outlineVariant = 0xFF2E2E33;
+                primary = 0xFFEE6A50; onPrimary = 0xFFFFFFFF; primaryContainer = 0xFF3A1E18; onPrimaryContainer = 0xFFFFD9D0;
+                secondaryContainer = 0xFF2A2A2F; onSecondaryContainer = 0xFFFFFFFF; tertiary = 0xFFFFB199;
+                playShape = 0; navStyle = NAV_PILL_DARK; playerStyle = PLAYER_RING; homeStyle = HOME_GREETING;
+                waveformSeekBar = true; progressColor = primary;
+                navBg = 0xFF1C1C20; navSelectedBg = 0xFFFFFFFF; navSelectedFg = 0xFF111111;
+                gradientTop = 0xFF1B1412; gradientBottom = 0xFF0E0E10;
+                fontAsset = "fonts/eppy_outfit.ttf";
+                return true;
+            case SKIN_MIDNIGHT:
+                dark = true;
+                set(0xFF17132A, 0xFF120F20, 0xFF1E1936, 0xFF241F40, 0xFF2D2750, 0xFF383060);
+                onSurface = 0xFFF3F0FF; onSurfaceVariant = 0xFFB4ACD6; outline = 0xFF6F6699; outlineVariant = 0xFF3A3360;
+                primary = 0xFFCDBDFF; onPrimary = 0xFF241A4A; primaryContainer = 0xFFD5C8FA; onPrimaryContainer = 0xFF1E1838;
+                secondaryContainer = 0xFF3A3166; onSecondaryContainer = 0xFFE9E2FF; tertiary = 0xFFFFB4D0;
+                playShape = 1; navStyle = NAV_BAR; playerStyle = PLAYER_TRANSCRIPT; homeStyle = HOME_HEADLINE;
+                waveformSeekBar = true; progressColor = primary;
+                navBg = 0xFF1B1731; navSelectedBg = 0xFF3A3166; navSelectedFg = 0xFFE9E2FF;
+                gradientTop = 0xFF2C2350; gradientBottom = 0xFF120F20;
+                fontAsset = "fonts/eppy_jakarta.ttf";
+                return true;
+            case SKIN_LAVENDER:
+                dark = false;
+                set(0xFFF5F1FB, 0xFFEDE7F6, 0xFFFFFFFF, 0xFFFBF9FE, 0xFFEFE9F8, 0xFFE6DEF3);
+                onSurface = 0xFF1C1A22; onSurfaceVariant = 0xFF6C6680; outline = 0xFFB9B1CC; outlineVariant = 0xFFE3DCEF;
+                primary = 0xFF8B2BE2; onPrimary = 0xFFFFFFFF; primaryContainer = 0xFFEBDDFB; onPrimaryContainer = 0xFF3A0A6B;
+                secondaryContainer = 0xFF1C1A22; onSecondaryContainer = 0xFFFFFFFF; tertiary = 0xFFB15DF0;
+                playShape = 2; navStyle = NAV_FLOATING; playerStyle = PLAYER_CARD; homeStyle = HOME_HEADLINE;
+                waveformSeekBar = true; progressColor = primary; cardShadow = true;
+                navBg = 0xFFFFFFFF; navSelectedBg = 0xFF8B2BE2; navSelectedFg = 0xFFFFFFFF;
+                gradientTop = 0xFFF8F4FE; gradientBottom = 0xFFECE3F8;
+                fontAsset = "fonts/eppy_outfit.ttf";
+                return true;
+            case SKIN_PAPER:
+                dark = false;
+                set(0xFFF2ECE3, 0xFFE9E1D5, 0xFFFBF8F3, 0xFFF7F2EA, 0xFFEDE5D9, 0xFFE5DCCD);
+                onSurface = 0xFF2A2622; onSurfaceVariant = 0xFF7E756B; outline = 0xFFC9BFB1; outlineVariant = 0xFFE3D9CB;
+                primary = 0xFF2A2622; onPrimary = 0xFFFBF8F3; primaryContainer = 0xFFFFFFFF; onPrimaryContainer = 0xFF2A2622;
+                secondaryContainer = 0xFFFFFFFF; onSecondaryContainer = 0xFF2A2622; tertiary = 0xFFD9493E;
+                playShape = 0; navStyle = NAV_BAR; playerStyle = PLAYER_CARD; homeStyle = HOME_GREETING;
+                waveformSeekBar = false; progressColor = 0xFFD9493E; cardShadow = true;
+                navBg = 0xFFF7F2EA; navSelectedBg = 0xFFFFFFFF; navSelectedFg = 0xFF2A2622;
+                fontAsset = "fonts/eppy_jakarta.ttf";
+                return true;
+            case SKIN_MONO:
+                dark = false;
+                set(0xFFF3F3F3, 0xFFEAEAEA, 0xFFFFFFFF, 0xFFFAFAFA, 0xFFEDEDED, 0xFFE4E4E4);
+                onSurface = 0xFF151515; onSurfaceVariant = 0xFF8C8C8C; outline = 0xFFCFCFCF; outlineVariant = 0xFFE6E6E6;
+                primary = 0xFF151515; onPrimary = 0xFFFFFFFF; primaryContainer = 0xFFF4C430; onPrimaryContainer = 0xFF151515;
+                secondaryContainer = 0xFFE6E6E6; onSecondaryContainer = 0xFF151515; tertiary = 0xFFF4C430;
+                playShape = 1; navStyle = NAV_FLOATING; playerStyle = PLAYER_CARD; homeStyle = HOME_EXPLORE;
+                waveformSeekBar = true; progressColor = 0xFFE9B30F; cardShadow = true;
+                navBg = 0xFFFFFFFF; navSelectedBg = 0xFF2A2A2A; navSelectedFg = 0xFFFFFFFF;
+                fontAsset = "fonts/eppy_jakarta.ttf";
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void set(int surface, int dim, int low, int container, int high, int highest) {
+        this.surface = surface;
+        this.surfaceDim = dim;
+        this.surfaceContainerLow = low;
+        this.surfaceContainer = container;
+        this.surfaceContainerHigh = high;
+        this.surfaceContainerHighest = highest;
+    }
+
+    /** Colours for the Now Playing screen; the Midnight skin uses a lilac player like its reference. */
+    private void derivePlayerTheme() {
+        if (playerStyle != PLAYER_TRANSCRIPT) {
+            playerTheme = this;
+            return;
+        }
+        EppyTheme p = copy();
+        p.dark = false;
+        p.surface = 0xFFCDBDF7;
+        p.surfaceContainerLow = 0xFFD8CBFA;
+        p.surfaceContainer = 0xFFDDD2FB;
+        p.surfaceContainerHigh = 0xFFE4DBFC;
+        p.surfaceContainerHighest = 0xFFBCAAF0;
+        p.onSurface = 0xFF1E1838;
+        p.onSurfaceVariant = 0xFF4E4570;
+        p.outline = 0xFF7E73A8;
+        p.outlineVariant = 0xFFB3A5E4;
+        p.primary = 0xFF2A2150;
+        p.onPrimary = 0xFFE9E2FF;
+        p.progressColor = 0xFF2A2150;
+        p.secondaryContainer = 0xFFDCD0FB;
+        p.onSecondaryContainer = 0xFF1E1838;
+        p.gradientTop = 0;
+        p.gradientBottom = 0;
+        p.playerTheme = p;
+        playerTheme = p;
+    }
+
+    public EppyTheme playerTheme() {
+        return playerTheme != null ? playerTheme : this;
+    }
+
+    private EppyTheme copy() {
+        EppyTheme t = new EppyTheme();
+        t.primary = primary; t.onPrimary = onPrimary; t.primaryContainer = primaryContainer; t.onPrimaryContainer = onPrimaryContainer;
+        t.secondaryContainer = secondaryContainer; t.onSecondaryContainer = onSecondaryContainer; t.tertiary = tertiary;
+        t.surface = surface; t.surfaceDim = surfaceDim; t.surfaceContainerLow = surfaceContainerLow; t.surfaceContainer = surfaceContainer;
+        t.surfaceContainerHigh = surfaceContainerHigh; t.surfaceContainerHighest = surfaceContainerHighest;
+        t.onSurface = onSurface; t.onSurfaceVariant = onSurfaceVariant; t.outline = outline; t.outlineVariant = outlineVariant;
+        t.scrim = scrim; t.dark = dark; t.mode = mode; t.accentSource = accentSource; t.customSeed = customSeed;
+        t.reduceMotion = reduceMotion; t.haptics = haptics; t.highContrast = highContrast; t.waveformSeekBar = waveformSeekBar;
+        t.skin = skin; t.playShape = playShape; t.navStyle = navStyle; t.playerStyle = playerStyle; t.homeStyle = homeStyle;
+        t.cardShadow = cardShadow; t.progressColor = progressColor; t.gradientTop = gradientTop; t.gradientBottom = gradientBottom;
+        t.navSelectedBg = navSelectedBg; t.navSelectedFg = navSelectedFg; t.navBg = navBg; t.fontAsset = fontAsset; t.userName = userName;
+        return t;
+    }
+
+    /** Background for full screens: the skin's gradient or the flat surface. */
+    public android.graphics.drawable.Drawable background() {
+        if (gradientTop == 0) return new android.graphics.drawable.ColorDrawable(surface);
+        return new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{gradientTop, gradientBottom});
     }
 
     private static boolean systemReducedMotion(Context c) {
@@ -99,7 +270,7 @@ public final class EppyTheme {
     }
 
     /** Reads a string the patch writes into the app's resources (patch options). */
-    static String configString(Context c, String name, String fallback) {
+    public static String configString(Context c, String name, String fallback) {
         try {
             int id = c.getResources().getIdentifier(name, "string", c.getPackageName());
             if (id != 0) {
@@ -221,11 +392,11 @@ public final class EppyTheme {
 
     private void enforceContrast() {
         // Text on primary must be readable (4.5:1); primary on surfaces must be visible (3:1).
-        if (contrast(onPrimary, primary) < 4.5) {
+        if (contrast(onPrimary, primary) < (SKIN_MATERIAL.equals(skin) ? 4.5 : 3.0)) {
             onPrimary = contrast(Color.BLACK, primary) > contrast(Color.WHITE, primary) ? Color.BLACK : Color.WHITE;
         }
         int guard = 0;
-        while (contrast(primary, surface) < 3.0 && guard++ < 12) {
+        while (SKIN_MATERIAL.equals(skin) && contrast(primary, surface) < 3.0 && guard++ < 12) {
             primary = dark ? blend(primary, Color.WHITE, 0.12f) : blend(primary, Color.BLACK, 0.12f);
         }
         if (contrast(onPrimaryContainer, primaryContainer) < 4.5) {
@@ -292,11 +463,12 @@ public final class EppyTheme {
 
     /** Outfit (bundled by the patch) at a given weight, falling back to the system sans-serif. */
     public static Typeface font(Context c, int weight) {
-        Typeface cached = fontCache.get(weight);
+        String key = currentFont + "@" + weight;
+        Typeface cached = fontCache.get(key);
         if (cached != null) return cached;
         Typeface t = null;
         try {
-            t = new Typeface.Builder(c.getAssets(), "fonts/eppy_outfit.ttf")
+            t = new Typeface.Builder(c.getAssets(), currentFont)
                     .setFontVariationSettings("'wght' " + weight)
                     .setWeight(weight)
                     .build();
@@ -306,7 +478,7 @@ public final class EppyTheme {
             if (baseFont == null) baseFont = Typeface.create("sans-serif", Typeface.NORMAL);
             t = Typeface.create(baseFont, weight, false);
         }
-        fontCache.put(weight, t);
+        fontCache.put(key, t);
         return t;
     }
 

@@ -12,16 +12,19 @@ import sabp.morphe.patches.smartaudiobook.smartAudioBookCompatibility
  * encoder, so the font ships as an asset and is applied in code.
  */
 internal val fontAssetPatch = resourcePatch(
-    description = "Bundles the Outfit font. Applied with the Eppy UI or Modern font patch.",
+    description = "Bundles the Outfit and Plus Jakarta Sans fonts. Applied with the Eppy UI or Modern font patch.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
 
     execute {
-        val font = get("assets/fonts/eppy_outfit.ttf")
-        font.parentFile.mkdirs()
-        val stream = object {}.javaClass.getResourceAsStream("/sabp/fonts/eppy_outfit.ttf")
-            ?: throw PatchException("Bundled font is missing from the patches file.")
-        stream.use { input -> font.outputStream().use { input.copyTo(it) } }
+        // Outfit and Plus Jakarta Sans, both SIL Open Font License 1.1.
+        for (name in listOf("eppy_outfit.ttf", "eppy_jakarta.ttf")) {
+            val font = get("assets/fonts/$name")
+            font.parentFile.mkdirs()
+            val stream = object {}.javaClass.getResourceAsStream("/sabp/fonts/$name")
+                ?: throw PatchException("Bundled font $name is missing from the patches file.")
+            stream.use { input -> font.outputStream().use { input.copyTo(it) } }
+        }
     }
 }
 

@@ -391,6 +391,88 @@ public final class EppyPlayer {
         });
     }
 
+    // ---- whole-book position, chapters, jumping ---------------------------------------------
+
+    private EppyBook book;
+    private long bookReadAt;
+    private int lastFilePos = -1;
+    private long lastFilePosAt;
+
+    /** The current book's files/chapters, refreshed at most every 2 s or when the file changes. */
+    public EppyBook book() {
+        long now = SystemClock.elapsedRealtime();
+        if (book == null || now - bookReadAt > 2000) {
+            try {
+                EppyBook b = EppyBook.current();
+                if (b != null || book == null) book = b;
+            } catch (Throwable ignored) {
+            }
+            bookReadAt = now;
+        }
+        return book;
+    }
+
+    public void invalidateBook() {
+        bookReadAt = 0;
+    }
+
+    /** Live position in the current file (seconds, fractional while playing), or -1. */
+    public double filePositionSeconds() {
+        Service service = EppyBridge.getPlayerService();
+        if (service == null) return -1;
+        int p;
+        try {
+            p = EppyBridge.filePositionSeconds(service);
+        } catch (Throwable t) {
+            p = -1;
+        }
+        if (p < 0) return -1;
+        long now = SystemClock.elapsedRealtime();
+        if (p != lastFilePos) {
+            lastFilePos = p;
+            lastFilePosAt = now;
+        }
+        double frac = isPlaying() ? Math.min(0.99, (now - lastFilePosAt) / 1000.0 * speed()) : 0;
+        return p + frac;
+    }
+
+    /** Live position in the whole book (seconds), or -1 when the book layout is unknown. */
+    public double bookPositionSeconds() {
+        EppyBook b = book();
+        double fp = filePositionSeconds();
+        if (b == null || fp < 0) return -1;
+        EppyBook.FileItem f = b.file(b.currentFile);
+        if (f == null || f.start < 0) return -1;
+        return f.start + fp;
+    }
+
+    /** Jumps to a file and position, like SABP's bookmarks and chapter list do. */
+    public boolean jumpTo(String fileName, int seconds) {
+        Service service = EppyBridge.getPlayerService();
+        if (service == null || fileName == null || !EppyBridge.isLinked()) return false;
+        main.post(() -> {
+            try {
+                EppyBridge.jumpTo(service, fileName, Math.max(0, seconds), true);
+            } catch (Throwable ignored) {
+            }
+            invalidateBook();
+            dispatchPlayback();
+        });
+        return true;
+    }
+
+    /** Jumps to a whole-book position. */
+    public boolean jumpToBook(double seconds) {
+        EppyBook b = book();
+        if (b == null) return false;
+        Object[] loc = b.locate((int) Math.round(seconds));
+        return loc != null && jumpTo((String) loc[0], (Integer) loc[1]);
+    }
+
+    public Context context() {
+        return app;
+    }
+
     public boolean canSeek() {
         return EppyBridge.isLinked() && EppyBridge.getPlayerService() != null;
     }
