@@ -6,6 +6,8 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.util.Log;
 
+import app.morphe.extension.sabp.read.DocStore;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintWriter;
@@ -63,6 +65,12 @@ public final class EppyDiag {
                 if (resumed.get() == a) resumed = new java.lang.ref.WeakReference<>(null);
             }
         });
+        // Must run before SABP's PlayerService starts (it does: Application.onCreate comes first).
+        try {
+            DocStore.rescue(app);
+        } catch (Throwable t) {
+            log("app", "document permission rescue failed: " + t);
+        }
         log("app", "started · Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ") · " + Build.MANUFACTURER + " " + Build.MODEL);
     }
 
