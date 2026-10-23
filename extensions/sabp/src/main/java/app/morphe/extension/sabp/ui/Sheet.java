@@ -39,7 +39,14 @@ public final class Sheet {
         bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
         sheet.setBackground(bg);
         sheet.setClickable(true);
-        sheet.setPadding(0, Ui.dp(c, 12), 0, Ui.dp(c, 24));
+        // The sheet's surface runs under the navigation bar; its content stays above it.
+        int navInset = 0;
+        android.view.WindowInsets wi = host.getRootWindowInsets();
+        if (wi != null) {
+            navInset = Math.max(wi.getInsets(android.view.WindowInsets.Type.systemBars()).bottom,
+                    wi.getInsets(android.view.WindowInsets.Type.ime()).bottom);
+        }
+        sheet.setPadding(0, Ui.dp(c, 12), 0, Ui.dp(c, 24) + navInset);
 
         View handle = new View(c);
         handle.setBackground(Ui.rounded(t.outline, Ui.dp(c, 2)));

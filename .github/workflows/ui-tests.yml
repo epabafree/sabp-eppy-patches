@@ -1,0 +1,51 @@
+name: UI tests
+
+# Renders eppy's views on the JVM (Paparazzi / layoutlib), checks their geometry, and uploads
+# the images as an artifact for review. Doesn't publish anything.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - extensions/**
+      - ui-tests/**
+      - .github/workflows/ui-tests.yml
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: Render and check components
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Record snapshots and run geometry checks
+        run: |
+          chmod +x gradlew
+          bash ./gradlew -p ui-tests recordPaparazziDebug --no-daemon --stacktrace
+
+      - name: Upload images
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eppy-ui-snapshots
+          path: |
+            ui-tests/src/test/snapshots/images
+            ui-tests/build/reports/tests
+            ui-tests/build/test-results
+          if-no-files-found: warn

@@ -33,7 +33,7 @@ public final class SettingsPage {
         root = new ScrollView(c);
         root.setFillViewport(true);
         col = Ui.column(c);
-        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 140));
+        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 8));
         root.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         build();
     }
@@ -74,6 +74,14 @@ public final class SettingsPage {
         }
         look.addView(toggle("High contrast", "Stronger text and outlines", "highContrast", t.highContrast));
         look.addView(toggle("Waveform seek bar", "A static waveform instead of the slider track", "waveform", t.waveformSeekBar));
+
+        LinearLayout mini = group("Mini-player");
+        mini.addView(label("Swipe sideways"));
+        mini.addView(segmented(new String[]{"Change chapter", "Pause and hide", "Off"},
+                new String[]{"chapters", "dismiss", "off"}, prefs().getString("miniSwipe", "chapters"), "miniSwipe"));
+        TextView mn = Ui.text(c, t, "Tap or swipe up to open the player. Swipe down to pause and hide it until you play again.", 13, 400, t.onSurfaceVariant);
+        mn.setPadding(Ui.dp(c, 16), Ui.dp(c, 4), Ui.dp(c, 16), Ui.dp(c, 12));
+        mini.addView(mn);
 
         LinearLayout motion = group("Motion and feedback");
         motion.addView(toggle("Reduce motion", "Skip transitions and shape animations", "reduceMotion", t.reduceMotion));

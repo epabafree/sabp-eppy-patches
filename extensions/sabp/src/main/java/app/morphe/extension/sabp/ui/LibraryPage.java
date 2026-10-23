@@ -39,7 +39,7 @@ public final class LibraryPage {
         root = new ScrollView(c);
         root.setFillViewport(true);
         LinearLayout col = Ui.column(c);
-        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 140));
+        col.setPadding(Ui.dp(c, 20), Ui.dp(c, 12), Ui.dp(c, 20), Ui.dp(c, 8));
         root.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout header = Ui.row(c);

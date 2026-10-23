@@ -448,11 +448,16 @@ public final class EppyPlayer {
 
     /** Jumps to a file and position, like SABP's bookmarks and chapter list do. */
     public boolean jumpTo(String fileName, int seconds) {
+        return jumpTo(fileName, seconds, true);
+    }
+
+    /** resume=false leaves playback paused after the jump (SABP pauses while it moves). */
+    public boolean jumpTo(String fileName, int seconds, boolean resume) {
         Service service = EppyBridge.getPlayerService();
-        if (service == null || fileName == null || !EppyBridge.isLinked()) return false;
+        if (service == null || fileName == null || !EppyBridge.isLinked() || !EppyBridge.has("jump")) return false;
         main.post(() -> {
             try {
-                EppyBridge.jumpTo(service, fileName, Math.max(0, seconds), true);
+                EppyBridge.jumpTo(service, fileName, Math.max(0, seconds), resume);
             } catch (Throwable ignored) {
             }
             invalidateBook();
@@ -467,6 +472,45 @@ public final class EppyPlayer {
         if (b == null) return false;
         Object[] loc = b.locate((int) Math.round(seconds));
         return loc != null && jumpTo((String) loc[0], (Integer) loc[1]);
+    }
+
+    /**
+     * Seeks by a relative amount across file and chapter boundaries, clamped to the book, keeping
+     * the current play/pause state. Falls back to SABP's own small rewind/forward when the book
+     * layout isn't known.
+     */
+    public boolean seekBy(int deltaSeconds) {
+        EppyBook b = book();
+        double pos = bookPositionSeconds();
+        if (b == null || pos < 0 || b.total <= 0) {
+            command(deltaSeconds < 0 ? EppyBridge.ACTION_REWIND_SMALL : EppyBridge.ACTION_FWD_SMALL);
+            return false;
+        }
+        double target = Math.max(0, Math.min(b.total - 1, pos + deltaSeconds));
+        Object[] loc = b.locate((int) Math.round(target));
+        if (loc == null) return false;
+        return jumpTo((String) loc[0], (Integer) loc[1], isPlaying());
+    }
+
+    /** Next (+1) or previous (-1) chapter; previous restarts the current one if >3 s in. */
+    public boolean skipChapter(int dir) {
+        EppyBook b = book();
+        if (b == null || b.chapters.size() < 2) {
+            command(dir > 0 ? EppyBridge.ACTION_NEXT_FILE : EppyBridge.ACTION_PREV_FILE);
+            return false;
+        }
+        int pos = (int) bookPositionSeconds();
+        int idx = b.chapterIndexAt(pos, (int) filePositionSeconds());
+        int target;
+        if (dir > 0) target = idx + 1;
+        else {
+            EppyBook.ChapterItem cur = idx >= 0 ? b.chapters.get(idx) : null;
+            boolean intoChapter = cur != null && cur.start >= 0 && pos >= 0 && pos - cur.start > 3;
+            target = intoChapter ? idx : idx - 1;
+        }
+        if (target < 0 || target >= b.chapters.size()) return false;
+        EppyBook.ChapterItem ch = b.chapters.get(target);
+        return jumpTo(ch.fileName, ch.positionInFile, isPlaying());
     }
 
     public Context context() {
