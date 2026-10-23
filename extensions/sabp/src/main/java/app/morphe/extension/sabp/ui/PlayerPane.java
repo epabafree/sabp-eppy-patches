@@ -38,7 +38,7 @@ public final class PlayerPane implements EppyBookmarks.Listener {
     private final FrameLayout coverFrame;
     private final RingCover ring;
     private final TextView transcript;
-    private final TextView title, chapter, elapsed, remaining, bookLine;
+    private final TextView title, chapter, elapsed, remaining, bookLine, subtitle;
     private final EppySlider slider;
     private final PlayButton play;
     private final LinearLayout chipRow;
@@ -81,6 +81,8 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         label.setGravity(Gravity.CENTER);
         label.setAccessibilityHeading(true);
         bar.addView(label, Ui.lp(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        bar.addView(Ui.iconButton(c, t, EppyIcon.LOCK, t.onSurface, 0, "Lock the player controls", v -> setLocked(true)));
+        bar.addView(Ui.iconButton(c, t, EppyIcon.CAST, t.onSurface, 0, "Audio output and cast", v -> ControlsPanels.showOutputSwitcher(host)));
         bar.addView(Ui.iconButton(c, t, EppyIcon.MORE, t.onSurface, 0, "More options", v -> host.showMoreSheet()));
         col.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -107,7 +109,12 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         coverFrame.addView(transcript, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         col.addView(coverFrame);
         new CoverGestures(c, t, CoverGestures.playerSeeker(c, host.player()), coverFrame, () -> {
+            // Single tap: like the classic player's cover, play/pause (the transcript opens Read along).
             if (transcript.getVisibility() == View.VISIBLE) sheet.show(PlayerSheet.TAB_READ);
+            else {
+                Ui.haptic(coverFrame, t);
+                host.player().playPause();
+            }
         });
 
         title = Ui.text(c, t, "", 25, 650, t.onSurface);
@@ -132,6 +139,14 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         bookLine.setGravity(Gravity.CENTER);
         bookLine.setLetterSpacing(0.04f);
         col.addView(bookLine, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        subtitle = Ui.text(c, t, "", 15, 500, t.onSurface);
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setMaxLines(3);
+        subtitle.setVisibility(View.GONE);
+        subtitle.setPadding(0, Ui.dp(c, 8), 0, 0);
+        subtitle.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        subtitle.setOnClickListener(v -> ControlsPanels.showSubtitles(host));
+        col.addView(subtitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         slider = new EppySlider(c);
         slider.apply(t, t.waveformSeekBar);
@@ -164,10 +179,10 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         // Transport controls.
         LinearLayout controls = Ui.row(c);
         controls.setGravity(Gravity.CENTER);
-        controls.addView(Ui.iconButton(c, t, EppyIcon.SKIP_PREV, t.onSurface, 0, "Previous file",
-                v -> host.player().command(EppyBridge.ACTION_PREV_FILE)));
+        controls.addView(Ui.iconButton(c, t, EppyIcon.SKIP_PREV, t.onSurface, 0, "Previous chapter",
+                v -> host.player().skipChapter(-1)));
         controls.addView(Ui.space(c, 4, 1));
-        controls.addView(sideButton(EppyIcon.REWIND, "Rewind", EppyBridge.ACTION_REWIND_SMALL));
+        controls.addView(sideButton(EppyIcon.REWIND, "Rewind", EppyBridge.ACTION_REWIND_SMALL, EppyBridge.ACTION_REWIND_BIG, false));
         controls.addView(Ui.space(c, 14, 1));
         play = new PlayButton(c);
         play.apply(t);
@@ -177,10 +192,10 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         });
         controls.addView(play, new LinearLayout.LayoutParams(Ui.dp(c, 84), Ui.dp(c, 84)));
         controls.addView(Ui.space(c, 14, 1));
-        controls.addView(sideButton(EppyIcon.FORWARD, "Fast forward", EppyBridge.ACTION_FWD_SMALL));
+        controls.addView(sideButton(EppyIcon.FORWARD, "Fast forward", EppyBridge.ACTION_FWD_SMALL, EppyBridge.ACTION_FWD_BIG, true));
         controls.addView(Ui.space(c, 4, 1));
-        controls.addView(Ui.iconButton(c, t, EppyIcon.SKIP_NEXT, t.onSurface, 0, "Next file",
-                v -> host.player().command(EppyBridge.ACTION_NEXT_FILE)));
+        controls.addView(Ui.iconButton(c, t, EppyIcon.SKIP_NEXT, t.onSurface, 0, "Next chapter",
+                v -> host.player().skipChapter(1)));
         LinearLayout.LayoutParams ctl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ctl.topMargin = Ui.dp(c, 12);
         col.addView(controls, ctl);
@@ -208,16 +223,76 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         update(true);
     }
 
-    private View sideButton(int icon, String desc, String action) {
+    /** Skip button: tap = SABP's short skip, long-press = its long skip, caption shows both. */
+    private View sideButton(int icon, String desc, String action, String bigAction, boolean forward) {
         boolean boxed = t.playShape == PlayButton.SHAPE_ROUNDED_SQUARE;
-        FrameLayout b = Ui.iconButton(c, t, icon, t.onSecondaryContainer, 0, desc, v -> host.player().command(action));
+        int small = app.morphe.extension.sabp.SabpPrefs.smallSeconds(c), big = app.morphe.extension.sabp.SabpPrefs.bigSeconds(c);
+        FrameLayout b = Ui.iconButton(c, t, icon, t.onSecondaryContainer, 0, desc + " " + small + " seconds", v -> host.player().command(action));
         int bg = boxed ? t.surfaceContainerHigh : t.secondaryContainer;
         b.setBackground(Ui.ripple(t, Ui.rounded(bg, Ui.dp(c, boxed ? 16 : 28)), Ui.dp(c, boxed ? 16 : 28)));
         if (t.playShape == PlayButton.SHAPE_OUTLINE_CIRCLE) b.setBackground(Ui.ripple(t, Ui.outlined(0, t.outline, Ui.dp(c, 1), Ui.dp(c, 28)), Ui.dp(c, 28)));
-        b.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(c, 56), Ui.dp(c, 56)));
         ((ImageView) b.getChildAt(0)).setImageDrawable(new EppyIcon(icon, boxed || t.playShape == PlayButton.SHAPE_OUTLINE_CIRCLE ? t.onSurface : t.onSecondaryContainer));
         b.getChildAt(0).setLayoutParams(new FrameLayout.LayoutParams(Ui.dp(c, 28), Ui.dp(c, 28), Gravity.CENTER));
-        return b;
+        b.setOnLongClickListener(v -> {
+            Ui.haptic(v, t);
+            host.player().command(bigAction);
+            root.announceForAccessibility((forward ? "Forward " : "Back ") + skipLabel(big));
+            return true;
+        });
+        b.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View h, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(h, info);
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(
+                        android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK, (forward ? "Forward " : "Back ") + skipLabel(big)));
+            }
+        });
+        LinearLayout col = Ui.column(c);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.addView(b, new LinearLayout.LayoutParams(Ui.dp(c, 56), Ui.dp(c, 56)));
+        TextView cap = Ui.label(c, t, skipLabel(small) + " · hold " + skipLabel(big), 11, 500, t.onSurfaceVariant);
+        cap.setIncludeFontPadding(false);
+        cap.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cl.topMargin = Ui.dp(c, 4);
+        col.addView(cap, cl);
+        return col;
+    }
+
+    private static String skipLabel(int s) {
+        return s >= 60 && s % 60 == 0 ? (s / 60) + " min" : s + " s";
+    }
+
+    // ---- lock -----------------------------------------------------------------------------------
+
+    private View lockOverlay;
+
+    /** Locks the player controls (the classic lock): touches are ignored until press-and-hold. */
+    private void setLocked(boolean on) {
+        if (on && lockOverlay == null) {
+            FrameLayout o = new FrameLayout(c);
+            o.setClickable(true);
+            o.setBackgroundColor(EppyTheme.withAlpha(0xFF000000, 0.15f));
+            TextView hint = Ui.text(c, t, "Controls locked · press and hold to unlock", 14, 600, 0xFFFFFFFF);
+            hint.setBackground(Ui.rounded(0xCC000000, Ui.dp(c, 20)));
+            hint.setPadding(Ui.dp(c, 16), Ui.dp(c, 10), Ui.dp(c, 16), Ui.dp(c, 10));
+            FrameLayout.LayoutParams hl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER_HORIZONTAL | Gravity.TOP);
+            hl.topMargin = Ui.dp(c, 64);
+            o.addView(hint, hl);
+            o.setOnLongClickListener(v -> {
+                setLocked(false);
+                return true;
+            });
+            o.setContentDescription("Player locked. Press and hold to unlock.");
+            root.addView(o, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            lockOverlay = o;
+            root.announceForAccessibility("Player locked");
+        } else if (!on && lockOverlay != null) {
+            root.removeView(lockOverlay);
+            lockOverlay = null;
+            root.announceForAccessibility("Player unlocked");
+        }
     }
 
     private void buildChips() {
@@ -255,6 +330,20 @@ public final class PlayerPane implements EppyBookmarks.Listener {
         });
         sleepChip.setContentDescription("Sleep timer " + (sleepOn ? lastSleepLabel : "off") + ". Double-tap to turn " + (sleepOn ? "off" : "on") + ", double-tap and hold for options.");
         addChip(sleepChip);
+
+        int boost = app.morphe.extension.sabp.BookControls.boost();
+        LinearLayout boostChip = Ui.chip(c, t, boost < 0 ? EppyIcon.VOLUME_DOWN : EppyIcon.VOLUME, ControlsPanels.boostLabel(boost), boost != 0, "Boost 3",
+                v -> ControlsPanels.cycleBoost(host, this::buildChips));
+        boostChip.setOnLongClickListener(v -> {
+            ControlsPanels.showBoost(host, this::buildChips);
+            return true;
+        });
+        addChip(boostChip);
+        boolean eqOn = !app.morphe.extension.sabp.BookControls.equalizer().flat();
+        addChip(Ui.chip(c, t, EppyIcon.EQUALIZER, "Equalizer", eqOn, v -> ControlsPanels.showEqualizer(host, this::buildChips)));
+        String rep = app.morphe.extension.sabp.BookControls.repeatMode();
+        addChip(Ui.chip(c, t, rep != null && rep.startsWith("File") ? EppyIcon.REPEAT_ONE : EppyIcon.REPEAT, rep == null ? "Repeat" : app.morphe.extension.sabp.BookControls.repeatLabel(rep),
+                rep != null, v -> ControlsPanels.showRepeat(host, this::buildChips)));
         boolean marked = isBookmarked();
         bookmarkShown = marked;
         bookmarkChip = Ui.chip(c, t, marked ? EppyIcon.BOOKMARK : EppyIcon.BOOKMARK_ADD, marked ? "Remove bookmark" : "Add bookmark", marked,
@@ -333,6 +422,7 @@ public final class PlayerPane implements EppyBookmarks.Listener {
 
     /** Back press: close the sheet first. */
     public boolean onBack() {
+        if (lockOverlay != null) return true;
         return sheet.onBack();
     }
 
@@ -380,6 +470,9 @@ public final class PlayerPane implements EppyBookmarks.Listener {
             lastSleepLabel = sl;
         }
         updateTranscript();
+        String sub = ControlsPanels.currentSubtitle(p);
+        if (sub != null && !sub.equals(subtitle.getText().toString())) subtitle.setText(sub);
+        subtitle.setVisibility(sub != null ? View.VISIBLE : View.GONE);
         sheet.refresh(false);
         if (!full) return;
 

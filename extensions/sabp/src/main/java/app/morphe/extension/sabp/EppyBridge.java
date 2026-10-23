@@ -170,6 +170,26 @@ public final class EppyBridge {
         return null;
     }
 
+    /** Patched: volume boost level (-1 quieter, 0 off, 1–3 louder), as the classic boost button sets it. */
+    public static void setBoost(Object service, int level) {
+    }
+
+    /** Patched: show ID3 titles instead of file names for the current book. */
+    public static void setId3Titles(Object service, boolean on) {
+    }
+
+    /** Patched: equalizer for the current book (an EqualizerLevels, or null for flat). */
+    public static void setEqualizer(Object service, Object levels) {
+    }
+
+    /** Patched: repeat mode for the current book (a RepeatSettings, or null for off). */
+    public static void setRepeat(Object service, Object repeat) {
+    }
+
+    /** Patched: skip-start/end seconds for the current book (a SkipStartEndSettings). */
+    public static void setSkipStartEnd(Object service, Object settings) {
+    }
+
     /** Patched: which SABP targets the patch found, "name=ok;name=missing: why". */
     public static String hookReport() {
         return "";
