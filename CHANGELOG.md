@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased (dev): built-in read-along transcription
+## v0.10.0: built-in read-along transcription
 
 - **Read along without fixing it by hand:** tap Read along → "Make a read-along?". eppy transcribes
   the audiobook on the phone with Whisper (whisper.cpp, MIT), keeping the time of every word. It runs in
