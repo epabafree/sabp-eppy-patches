@@ -466,7 +466,7 @@ val eppyUiPatch = resourcePatch(
         "Best used with Hooman's SABP patch.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
-    dependsOn(eppyUiBytecodePatch)
+    dependsOn(eppyUiBytecodePatch, sabp.morphe.patches.smartaudiobook.read.nativeLibsPatch)
 
     val startScreen by booleanOption(
         key = "startScreen",
