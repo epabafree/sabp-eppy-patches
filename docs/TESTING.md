@@ -84,3 +84,24 @@ Driven by the developer through scrcpy on the user's phone.
 | Back collapses the sheet | pass |
 | Player title / chapter line | **fail** → fixed in 0.8.1 (author shown as title) |
 | Seek bar on a 33 h single-file book | **fail** → fixed in 0.8.1 (now per chapter) |
+
+
+## Device checklist: built-in transcription (dev, not yet on a device)
+
+Verified without a device: whisper.cpp JNI transcribes `jfk.wav` correctly on CI with word timings
+(base.en: 11 s of audio in 1.9 s on 2 threads); both arm64 builds link and export the JNI symbols; a
+dev bundle patches SABP 11.7.8 with the libraries present, `extractNativeLibs="true"` and the classes
+in the dex.
+
+On the phone:
+1. Settings → Diagnostics: "Speech engine" line names `eppywhisper_v82` (or `eppywhisper`), no load error.
+2. Read tab on a book with no pairing → "Make a read-along?" → Start → download sheet → Standard.
+   Progress shows in the status line; cancel and restart resumes.
+3. Play: within a minute the first paragraphs appear; the highlighted word follows the narration.
+   Tap a paragraph → playback jumps there.
+4. On battery: status says "Ahead of you" after ~10 min ahead; playback never stutters.
+5. Charging: keeps going past the 10-minute mark; Diagnostics speed ≥ 3× real time.
+6. `<file>.transcript.srt` appears in the book folder; SABP's own subtitles unaffected.
+7. Pair the EPUB: status shows "N passages matched to the transcript"; highlight stays right across
+   the book's front matter and chapter breaks.
+8. Pause/resume, switch books, kill the app mid-transcription: no crash loop; it continues.

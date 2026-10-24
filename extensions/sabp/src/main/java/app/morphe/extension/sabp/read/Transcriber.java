@@ -118,7 +118,10 @@ public final class Transcriber {
         }
         else s.remove(folderUri);
         prefs.edit().putStringSet("books", s).apply();
-        if (on) ensureRunning();
+        if (on) {
+            ensureRunning();
+            kick();
+        }
         notifyChanged();
     }
 
@@ -220,6 +223,7 @@ public final class Transcriber {
             notifyChanged();
             if (err == null) {
                 ensureRunning();
+                kick();
                 if (done != null) main.post(done);
             }
         }, "eppy-model-download").start();
@@ -267,6 +271,17 @@ public final class Transcriber {
         worker.start();
     }
 
+    private final Object wake = new Object();
+    private boolean kicked;
+
+    /** Wakes the worker now (e.g. the model finished downloading, or playback moved). */
+    public void kick() {
+        synchronized (wake) {
+            kicked = true;
+            wake.notifyAll();
+        }
+    }
+
     public synchronized void shutdown() {
         stop = true;
         Whisper.abort();
@@ -290,7 +305,10 @@ public final class Transcriber {
             }
             if (whisper != null && SystemClock.elapsedRealtime() - whisperUsedAt > 120_000) closeWhisper();
             try {
-                Thread.sleep(sleep);
+                synchronized (wake) {
+                    if (!kicked) wake.wait(sleep);
+                    kicked = false;
+                }
             } catch (InterruptedException ie) {
                 break;
             }

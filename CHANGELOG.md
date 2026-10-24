@@ -1,5 +1,26 @@
 # Release notes
 
+## Unreleased (dev): built-in read-along transcription
+
+- **Read along without fixing it by hand:** tap Read along → "Make a read-along?". eppy transcribes
+  the audiobook on the phone with Whisper (whisper.cpp, MIT), keeping the time of every word. It runs in
+  the background in small 30-second pieces: a few minutes ahead of where you're listening on battery
+  (two low-priority threads, resting as long as it works), the whole book while the phone charges, and
+  it pauses below 20% battery or when the phone is warm. Progress is saved after every piece.
+- **Works without a book file:** the Read tab shows the transcript of the file you're hearing, with
+  the spoken word highlighted; parts not done yet are marked.
+- **EPUB/PDF as a reference, not a copy:** with a book paired, every ~14 transcribed words are found in
+  the book's text and the matches are chained in order. Skipped front matter, footnotes and appendices
+  no longer pull the highlight off (the old rules rejected every match after a skip). Names from the
+  book are given to Whisper so it spells them the book's way.
+- **Files in the book folder:** `<file>.transcript.srt` next to each audio file.
+- **Speech model:** downloaded once, only after you agree (Standard 60 MB, or Small 32 MB), from
+  whisper.cpp's model page on Hugging Face; resumable. Audio never leaves the phone.
+- **Safety:** if the app ends during a piece, that piece is skipped next time; after three such ends
+  within half an hour, transcription switches itself off and the Read tab offers "Try again".
+- Diagnostics shows which speech engine loaded (fast armv8.2 build or baseline), the model and speed.
+- The patch adds about 1.4 MB to the APK (two builds of the engine) and sets `extractNativeLibs`.
+
 ## v0.9.2: fixes the read-along crash loop (root cause found in the device log)
 
 - **Cause:** pairing an EPUB/PDF made eppy keep a persistent permission to that one file. Smart
