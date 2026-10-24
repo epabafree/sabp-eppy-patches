@@ -44,7 +44,7 @@ private const val BOOKMARK = "$SABP/Bookmark;"
 private const val CHARACTER = "$SABP/CharacterDescription;"
 private const val SLEEP_SETTINGS = "$SABP/PlayerSettingsSleepActivity;"
 private const val SETTINGS_ACTIVITY = "$SABP/PlayerSettingsActivity;"
-const val EPPY_VERSION = "0.9.2"
+const val EPPY_VERSION = "0.10.0"
 private const val EPPY_ACTIVITY = "app.morphe.extension.sabp.EppyActivity"
 
 private fun newLauncherFilter(doc: org.w3c.dom.Document): Element =
@@ -466,7 +466,7 @@ val eppyUiPatch = resourcePatch(
         "Best used with Hooman's SABP patch.",
 ) {
     compatibleWith(smartAudioBookCompatibility)
-    dependsOn(eppyUiBytecodePatch)
+    dependsOn(eppyUiBytecodePatch, sabp.morphe.patches.smartaudiobook.read.nativeLibsPatch)
 
     val startScreen by booleanOption(
         key = "startScreen",

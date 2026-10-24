@@ -14,7 +14,7 @@ import java.util.List;
  * a few anchors give a good follow-along; with none it falls back to a whole-book estimate.
  */
 public final class Alignment {
-    public static final int SRC_OVERLAY = 0, SRC_SPEECH = 1, SRC_MANUAL = 2, SRC_CHAPTER = 3;
+    public static final int SRC_OVERLAY = 0, SRC_SPEECH = 1, SRC_MANUAL = 2, SRC_CHAPTER = 3, SRC_TRANSCRIPT = 4;
 
     /** How trustworthy the position at a given time is. */
     public static final int LEVEL_ESTIMATE = 0, LEVEL_APPROX = 1, LEVEL_CONFIRMED = 2, LEVEL_MANUAL = 3, LEVEL_EXACT = 4;
@@ -61,7 +61,8 @@ public final class Alignment {
         switch (source) {
             case SRC_OVERLAY: return 4;
             case SRC_MANUAL: return 3;
-            case SRC_SPEECH: return 2;
+            case SRC_SPEECH:
+            case SRC_TRANSCRIPT: return 2;
             default: return 1; // chapter (approximate)
         }
     }
@@ -107,6 +108,7 @@ public final class Alignment {
             int lvl;
             if (x.source == SRC_OVERLAY) lvl = d < 120 ? LEVEL_EXACT : LEVEL_APPROX;
             else if (x.source == SRC_MANUAL) lvl = d < 300 ? LEVEL_MANUAL : d < 1800 ? LEVEL_APPROX : LEVEL_ESTIMATE;
+            else if (x.source == SRC_TRANSCRIPT) lvl = d < 45 ? LEVEL_CONFIRMED : d < 600 ? LEVEL_APPROX : LEVEL_ESTIMATE;
             else if (x.source == SRC_SPEECH) lvl = d < 600 ? LEVEL_CONFIRMED : d < 2400 ? LEVEL_APPROX : LEVEL_ESTIMATE;
             else lvl = d < 3600 ? LEVEL_APPROX : LEVEL_ESTIMATE;
             best = Math.max(best, lvl);
@@ -119,6 +121,52 @@ public final class Alignment {
         for (Anchor a : anchors) if (source >= 0 && a.source != source) keep.add(a);
         anchors.clear();
         anchors.addAll(keep);
+    }
+
+    /**
+     * Replaces the transcript anchors with a chain that is already in time and word order (see
+     * TranscriptSync). Unlike add(), large forward jumps in the text are allowed here: they are
+     * passages the narrator skipped (front matter, footnotes, appendices). Anchors that disagree
+     * with manual corrections or book timings are left out; chapter and listening anchors that
+     * disagree with the chain are dropped.
+     */
+    public synchronized int setTranscriptChain(List<Anchor> chain) {
+        clear(SRC_TRANSCRIPT);
+        ArrayList<Anchor> strong = new ArrayList<>();
+        for (Anchor o : anchors) if (o.source == SRC_MANUAL || o.source == SRC_OVERLAY) strong.add(o);
+        int added = 0;
+        ArrayList<Anchor> keep = new ArrayList<>();
+        for (Anchor a : chain) {
+            boolean bad = false;
+            for (Anchor o : strong) {
+                double dt = a.seconds - o.seconds;
+                int dw = a.word - o.word;
+                if ((dt > 0 && dw < 0) || (dt < 0 && dw > 0)) {
+                    bad = true;
+                    break;
+                }
+            }
+            if (!bad) keep.add(a);
+        }
+        if (!keep.isEmpty()) {
+            ArrayList<Anchor> drop = new ArrayList<>();
+            for (Anchor o : anchors) {
+                if (o.source != SRC_CHAPTER && o.source != SRC_SPEECH) continue;
+                for (Anchor a : keep) {
+                    double dt = a.seconds - o.seconds;
+                    int dw = a.word - o.word;
+                    if ((dt > 0 && dw < 0) || (dt < 0 && dw > 0) || Math.abs(dt) < 2) {
+                        drop.add(o);
+                        break;
+                    }
+                }
+            }
+            anchors.removeAll(drop);
+            anchors.addAll(keep);
+            added = keep.size();
+            Collections.sort(anchors);
+        }
+        return added;
     }
 
     public synchronized void setOverlays(List<BookText.Overlay> overlays) {
@@ -189,7 +237,7 @@ public final class Alignment {
     public synchronized JSONArray toJson() {
         JSONArray a = new JSONArray();
         for (Anchor x : anchors) {
-            if (x.source == SRC_OVERLAY || x.source == SRC_CHAPTER) continue; // rebuilt from the document/audio
+            if (x.source == SRC_OVERLAY || x.source == SRC_CHAPTER || x.source == SRC_TRANSCRIPT) continue; // rebuilt from the document/audio/transcript
             try {
                 a.put(new JSONArray().put(x.seconds).put(x.word).put(x.source).put((double) x.confidence));
             } catch (Exception ignored) {

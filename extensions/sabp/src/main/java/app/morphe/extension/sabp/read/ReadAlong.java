@@ -84,10 +84,17 @@ public final class ReadAlong {
     private int samplesTried, samplesAccepted, samplesRejected;
     private final ArrayList<Double> pendingSamples = new ArrayList<>();
     private String interruptedNotice;
+    // Transcript matching (on-device transcript ↔ document).
+    private java.util.Map<String, double[]> tsCache;
+    private String tsCacheDoc;
+    private int transcriptPassages;
+    private boolean tsScheduled;
+    private volatile int tsGeneration;
 
     private ReadAlong(Context c) {
         this.c = c;
         this.speech = new SpeechSync(c);
+        Transcriber.get(c).addListener(() -> scheduleTranscriptSync(30_000));
         // Crash-loop breaker: if the process died during a read-along job last time, turn
         // automatic work off and tell the user, instead of repeating the same job at startup.
         EppyDiag.ensure(c);
@@ -208,6 +215,8 @@ public final class ReadAlong {
         docName = prefs().getString("name:" + folder, null);
         failuresInRow = 0;
         samplesTried = samplesAccepted = samplesRejected = 0;
+        transcriptPassages = 0;
+        tsGeneration++;
         errorTitle = null;
         if (docUri == null) {
             set(State.NONE, "", "");
@@ -364,6 +373,9 @@ public final class ReadAlong {
                 restoreAnchors(doc);
                 alignChapters();
                 updateReadyMessage();
+                transcriptPassages = 0;
+                hintNames(result, folder);
+                scheduleTranscriptSync(500);
             });
         });
     }
@@ -419,6 +431,7 @@ public final class ReadAlong {
             int speechN = alignment.anchorCount(Alignment.SRC_SPEECH), manualN = alignment.anchorCount(Alignment.SRC_MANUAL);
             StringBuilder b = new StringBuilder();
             if (chapterPairs > 0) b.append(chapterPairs).append(" chapters matched by title (approximate)");
+            if (transcriptPassages > 0) b.append(b.length() > 0 ? " · " : "").append(transcriptPassages).append(transcriptPassages == 1 ? " passage" : " passages").append(" matched to the transcript");
             if (speechN > 0) b.append(b.length() > 0 ? " · " : "").append(speechN).append(speechN == 1 ? " passage" : " passages").append(" confirmed by listening");
             if (manualN > 0) b.append(b.length() > 0 ? " · " : "").append(manualN).append(" manual ").append(manualN == 1 ? "correction" : "corrections");
             if (b.length() == 0) b.append(text.pagesOnly ? "Following by page, estimated from the book length." : "Estimated from the book length. Long-press the paragraph you're hearing to sync it.");
@@ -612,6 +625,62 @@ public final class ReadAlong {
         } else {
             main.postDelayed(this::runNextSample, 600);
         }
+    }
+
+    // ---- stage 4b: the on-device transcript ---------------------------------------------------
+
+    /** Gives the recogniser the book's names so it spells them as the book does. */
+    private void hintNames(BookText t, String folder) {
+        if (t.pagesOnly) return;
+        worker.execute(() -> {
+            try {
+                String names = TranscriptSync.namesPrompt(t);
+                if (names != null) Transcriber.get(c).setPrompt(folder, names);
+            } catch (Throwable e) {
+                EppyDiag.log("readalong", "names: " + e.getClass().getSimpleName());
+            }
+        });
+    }
+
+    /** Matches newly transcribed audio to the document, at most every {@code delayMs}. */
+    private void scheduleTranscriptSync(long delayMs) {
+        if (tsScheduled) return;
+        tsScheduled = true;
+        main.postDelayed(() -> {
+            tsScheduled = false;
+            syncTranscript();
+        }, delayMs);
+    }
+
+    private void syncTranscript() {
+        final BookText t = text;
+        final String folder = folderUri, doc = docUri;
+        EppyBook b = EppyPlayer.get(c).book();
+        if (t == null || t.pagesOnly || folder == null || doc == null || b == null || !folder.equals(b.folderUri)) return;
+        Transcriber tr = Transcriber.get(c);
+        if (!tr.enabled(folder)) return;
+        final int gen = ++tsGeneration;
+        worker.execute(() -> {
+            try {
+                File cf = new File(dir(), "tsync_" + Integer.toHexString((folder + "|" + doc).hashCode()) + ".json");
+                if (tsCache == null || !doc.equals(tsCacheDoc)) {
+                    tsCache = cf.exists() ? TranscriptSync.fromJson(new JSONObject(read(cf))) : new java.util.HashMap<>();
+                    tsCacheDoc = doc;
+                }
+                int before = tsCache.size();
+                List<Alignment.Anchor> chain = TranscriptSync.run(t, b, tr, tsCache, () -> gen != tsGeneration);
+                if (chain == null) return;
+                if (tsCache.size() != before) write(cf, TranscriptSync.toJson(tsCache).toString());
+                main.post(() -> {
+                    if (gen != tsGeneration || text != t) return;
+                    transcriptPassages = alignment.setTranscriptChain(chain) / 2;
+                    if (state == State.READY) updateReadyMessage();
+                    else changed();
+                });
+            } catch (Throwable e) {
+                EppyDiag.error("readalong", "transcript matching failed: " + e);
+            }
+        });
     }
 
     // ---- stage 5: storage -----------------------------------------------------------------------
