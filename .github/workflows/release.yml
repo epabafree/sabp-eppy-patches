@@ -17,6 +17,9 @@ on:
       - docs/**
       - ui-tests/**
       - .github/workflows/ui-tests.yml
+      - .github/workflows/dev-build.yml
+      - .github/workflows/native.yml
+      - native/**
 
 permissions:
   contents: write
