@@ -1,0 +1,4 @@
+system: WHISPER : VITISAI = 0 | COREML = 0 | OPENVINO = 0 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | REPACK = 1 | 
+audio: 11.0 s
+load ms: 52
+{"segments":[{"t0":0,"t1":11000,"nsp":0.000,"text":" And so my fellow Americans asked not what your country can do for you, ask what you can do for your country.","tokens":[[320,380," And",0.584],[380,530," so",0.987],[690,880," my",0.818],[880,1650," fellow",0.997],[1650,2100," Americans",0.922],[3290,4180," asked",0.340],[4180,4290," not",0.687],[5410,5430," what",0.964],[5430,5830," your",0.986],[5970,6610," country",0.997],[6620,6900," can",0.995],[7010,7150," do",0.998],[7150,7470," for",0.996],[7470,7680," you",0.998],[7810,8030,",",0.411],[8190,8320," ask",0.594],[8320,8700," what",0.988],[8700,9000," you",0.994],[9000,9260," can",0.970],[9260,9380," do",0.987],[9440,9670," for",0.994],[9730,9990," your",0.996],[10040,10590," country",0.999],[10690,10990,".",0.920]]}],"ms":1902}

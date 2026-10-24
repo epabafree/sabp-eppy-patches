@@ -1,0 +1,3 @@
+total 3120
+-rwxr-xr-x 1 runner runner 1599488 Oct 24 23:25 libeppywhisper.so
+-rwxr-xr-x 1 runner runner 1592096 Oct 24 23:26 libeppywhisper_v82.so

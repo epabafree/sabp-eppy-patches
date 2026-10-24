@@ -1,0 +1,2 @@
+-rw-r--r-- 1 runner runner 32166155 Oct 24 23:24 build/tiny.en-q5_1.bin
+-rw-r--r-- 1 runner runner 59721011 Oct 24 23:24 build/base.en-q5_1.bin
