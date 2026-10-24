@@ -246,7 +246,16 @@ public final class EppyBridge {
             }
         }
         b.append("Player interface: ").append(EppyRoute.playerInterface(c)).append('\n');
-        b.append("Speech matching: ").append(app.morphe.extension.sabp.read.SpeechSync.supported(c) ? "available on this device" : "not available (needs Android 13+ and an on-device model)");
+        b.append("Speech matching: ").append(app.morphe.extension.sabp.read.SpeechSync.supported(c) ? "available on this device" : "not available (needs Android 13+ and an on-device model)").append('\n');
+        try {
+            app.morphe.extension.sabp.read.Transcriber tr = app.morphe.extension.sabp.read.Transcriber.get(c);
+            b.append("Speech engine: ").append(app.morphe.extension.sabp.read.Whisper.available()
+                    ? app.morphe.extension.sabp.read.Whisper.libraryName() + ", model " + (tr.modelReady() ? tr.model().id : "not downloaded")
+                    + ", " + tr.state() + (tr.speedLabel() != null ? ", " + tr.speedLabel() : "")
+                    : "not loaded (" + app.morphe.extension.sabp.read.Whisper.loadError() + ")");
+        } catch (Throwable t) {
+            b.append("Speech engine: ").append(t);
+        }
         return b.toString();
     }
 

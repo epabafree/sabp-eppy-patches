@@ -7,6 +7,7 @@ import android.os.Build;
 import android.util.Log;
 
 import app.morphe.extension.sabp.read.DocStore;
+import app.morphe.extension.sabp.read.Transcriber;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -49,7 +50,7 @@ public final class EppyDiag {
         // Resume background transcription (if any book has it on) once the app has settled.
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
-                app.morphe.extension.sabp.read.Transcriber.get(app).ensureRunning();
+                Transcriber.get(app).ensureRunning();
             } catch (Throwable t) {
                 error("transcribe", "start failed: " + t);
             }
