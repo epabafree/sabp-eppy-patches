@@ -1,0 +1,64 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :extensions:sabp:preBuild UP-TO-DATE
+> Task :patches:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :extensions:sabp:preReleaseBuild UP-TO-DATE
+> Task :extensions:sabp:generateReleaseResources
+> Task :extensions:sabp:checkReleaseDuplicateClasses
+> Task :extensions:sabp:packageReleaseResources
+> Task :extensions:sabp:processReleaseNavigationResources
+> Task :extensions:sabp:javaPreCompileRelease
+> Task :extensions:sabp:mergeReleaseArtProfile
+> Task :extensions:sabp:checkReleaseAarMetadata
+> Task :extensions:sabp:parseReleaseLocalResources
+> Task :extensions:sabp:mapReleaseSourceSetPaths
+> Task :extensions:sabp:generateReleaseRFile
+> Task :extensions:sabp:compileReleaseNavigationResources
+> Task :extensions:sabp:compileReleaseKotlin NO-SOURCE
+
+> Task :extensions:sabp:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/extensions/sabp/src/main/java/app/morphe/extension/sabp/EppyBridge.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :extensions:sabp:mergeReleaseResources
+> Task :extensions:sabp:createReleaseCompatibleScreenManifests
+> Task :extensions:sabp:extractDeepLinksRelease
+> Task :extensions:sabp:processReleaseMainManifest
+> Task :extensions:sabp:processReleaseManifest
+> Task :extensions:sabp:processReleaseManifestForPackage
+> Task :extensions:sabp:extractProguardFiles
+> Task :extensions:sabp:processReleaseJavaRes NO-SOURCE
+> Task :extensions:sabp:mergeReleaseStartupProfile
+> Task :extensions:sabp:processReleaseResources
+> Task :extensions:sabp:expandReleaseArtProfileWildcards
+> Task :extensions:sabp:mergeReleaseGeneratedProguardFiles
+> Task :extensions:sabp:mergeReleaseJavaResource
+> Task :patches:compileKotlin
+> Task :patches:compileJava NO-SOURCE
+> Task :extensions:sabp:minifyReleaseWithR8
+> Task :extensions:sabp:syncExtension
+> Task :patches:processResources
+> Task :patches:classes
+> Task :patches:jar
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:sabp/morphe/patches/smartaudiobook/read/NativeLibsPatchKt.class:
+Type `kotlin.jvm.functions.Function1` was not found, it is required for default or static interface methods desugaring of `sabp.morphe.patches.smartaudiobook.read.NativeLibsPatchKt$$InternalSyntheticLambda$2$d4743fc06c6a5175581e4c00e196c4639847f4767073a852497c86b65b925493$0`
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:sabp/morphe/patches/smartaudiobook/ui/EppyUiPatchKt.class:
+Type `kotlin.jvm.functions.Function0` was not found, it is required for default or static interface methods desugaring of `sabp.morphe.patches.smartaudiobook.ui.EppyUiPatchKt$$InternalSyntheticLambda$2$2c43d7135b9c797d0e6a0f0761c84a3f3af877bd2153d2104ad8dd830f31d9da$0`
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:util/PatchListGeneratorKt.class:
+Type `java.io.FileFilter` was not found, it is required for default or static interface methods desugaring of `util.PatchListGeneratorKt$$InternalSyntheticLambda$2$2f8c33d04f3b04ca2d9b8d82e37de176564680cdde43065ce57556fc6f8056ed$0`
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:util/PatchListGeneratorKt$generatePatchList$$inlined$sortedBy$1.class:
+Type `java.util.Comparator` was not found, it is required for default or static interface methods desugaring of `util.PatchListGeneratorKt$generatePatchList$$inlined$sortedBy$1`
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:sabp/morphe/patches/smartaudiobook/theme/ModernFontPatchKt$modernFontPatch$lambda$0$$inlined$extendWith$2.class:
+Type `java.util.function.Supplier` was not found, it is required for default or static interface methods desugaring of `sabp.morphe.patches.smartaudiobook.theme.ModernFontPatchKt$modernFontPatch$lambda$0$$inlined$extendWith$2`
+Warning in /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/patches/build/libs/patches-0.10.1.mpp:sabp/morphe/patches/smartaudiobook/theme/MaterialYouThemePatchKt.class:
+Type `kotlin.jvm.functions.Function2` was not found, it is required for default or static interface methods desugaring of `sabp.morphe.patches.smartaudiobook.theme.MaterialYouThemePatchKt$$InternalSyntheticLambda$2$5ac96d69378cacf383976fd91c77b6e8884aa8b050a1201b254167ded4ef0ce9$0`
+> Task :patches:buildAndroid
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1792887774482.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/sabp-eppy-patches/sabp-eppy-patches/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 33s
+30 actionable tasks: 30 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
