@@ -1,5 +1,19 @@
 # Release notes
 
+## v0.10.1: crash fix and read-along polish (from the first device test)
+
+- **Fixed a crash when the classic player hands over to eppy** (notification tap, launcher, task restore):
+  SABP's PlayerActivity tried to unregister a receiver it never registered, and Android 16 ended the whole
+  app. This was also what stopped background transcription ("process ended during …" in the log).
+- **Invisible "Start read-along" button fixed**; the prompt's buttons are full width now.
+- **Transcript matches survive a restart:** after the app restarted, the EPUB view fell back to
+  "Estimated"; matching now waits for the player and re-runs. The status says "Matched to the transcript".
+- **Progress you can read:** "41 min of 33 h 46 min transcribed (2%)", in the transcript and EPUB views.
+- **"You're here"**: in a part not transcribed yet, the placeholder says it's being worked on from there.
+- **Speed up for 30 minutes**: works like while charging (more cores, no rests); chip and menu.
+- **Long-press a transcript paragraph:** play from here, copy, share.
+- Java crashes no longer count against the speech engine or skip pieces of the transcript.
+
 ## v0.10.0: built-in read-along transcription
 
 - **Read along without fixing it by hand:** tap Read along → "Make a read-along?". eppy transcribes

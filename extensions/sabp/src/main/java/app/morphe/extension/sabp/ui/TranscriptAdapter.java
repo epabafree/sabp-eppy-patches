@@ -156,6 +156,33 @@ final class TranscriptAdapter extends BaseAdapter {
         out.add(p);
     }
 
+    /** Refreshes the whole-book progress in the background (for the document view too). */
+    void refreshProgress(EppyBook b, Runnable done) {
+        if (b == null) return;
+        final Transcriber tr = Transcriber.get(c);
+        loader.execute(() -> {
+            long[] pr = tr.progress(b);
+            main.post(() -> {
+                progress = pr;
+                if (done != null) done.run();
+            });
+        });
+    }
+
+    /** "41 min of 33 h 46 min transcribed (2%)". */
+    String progressLabel() {
+        long[] pr = progress;
+        if (pr[1] <= 0) return "";
+        double pct = 100.0 * pr[0] / pr[1];
+        String p = pct > 0 && pct < 1 ? "<1%" : Math.round(pct) + "%";
+        return span(pr[0]) + " of " + span(pr[1]) + " transcribed (" + p + ")";
+    }
+
+    static String span(long ms) {
+        long min = ms / 60_000;
+        return min >= 60 ? (min / 60) + " h " + (min % 60) + " min" : min + " min";
+    }
+
     /** Updates the current paragraph/word for a position in the file; true when the paragraph changed. */
     boolean setPosition(long ms) {
         int pi = -1;
@@ -212,7 +239,13 @@ final class TranscriptAdapter extends BaseAdapter {
         tv.setBackground(null);
         if (p.pending) {
             tv.setTextColor(t.onSurfaceVariant);
-            tv.setText(Ui.time(p.t0) + "–" + Ui.time(p.t1) + " · not transcribed yet. It's done a few minutes ahead of where you listen, and the whole book while the phone charges.");
+            if (i == curPara) {
+                tv.setBackground(Ui.rounded(EppyTheme.withAlpha(t.tertiary, 0.10f), Ui.dp(c, 12)));
+                tv.setText("You're here, in a part that isn't transcribed yet (" + Ui.time(p.t0) + "–" + Ui.time(p.t1)
+                        + "). eppy is working from where you're listening; the text appears here within a minute or two.");
+            } else {
+                tv.setText(Ui.time(p.t0) + "–" + Ui.time(p.t1) + " · not transcribed yet. It's done a few minutes ahead of where you listen, and the whole book while the phone charges.");
+            }
             tv.setContentDescription(tv.getText());
             return;
         }

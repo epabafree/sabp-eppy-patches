@@ -141,6 +141,7 @@ public final class EppyDiag {
 
     private static void recordCrash(Thread thread, Throwable error) {
         if (app == null) return;
+        Transcriber.onJavaCrash(app);
         StringWriter sw = new StringWriter();
         error.printStackTrace(new PrintWriter(sw));
         String job = prefs().getString("job", null);

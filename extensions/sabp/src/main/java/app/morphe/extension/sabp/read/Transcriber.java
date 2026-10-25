@@ -88,6 +88,17 @@ public final class Transcriber {
         }
     }
 
+    /**
+     * A Java crash (recorded by EppyDiag) isn't the speech engine's fault: forget the window in
+     * flight so it isn't skipped or counted against the engine.
+     */
+    public static void onJavaCrash(Context c) {
+        try {
+            c.getSharedPreferences("eppy_asr", Context.MODE_PRIVATE).edit().remove("inFlight").commit();
+        } catch (Throwable ignored) {
+        }
+    }
+
     /** True when transcription stopped itself after crashes. */
     public boolean stoppedAfterCrash() {
         return prefs.getInt("crashes", 0) >= 3;
@@ -123,6 +134,21 @@ public final class Transcriber {
             kick();
         }
         notifyChanged();
+    }
+
+    /** "Speed up": for a while, work like when charging (more threads, no rests, further ahead). */
+    public void boost(long forMs) {
+        prefs.edit().putLong("boostUntil", forMs > 0 ? System.currentTimeMillis() + forMs : 0).apply();
+        kick();
+        notifyChanged();
+    }
+
+    public boolean boosted() {
+        return prefs.getLong("boostUntil", 0) > System.currentTimeMillis();
+    }
+
+    public long boostRemainingMs() {
+        return Math.max(0, prefs.getLong("boostUntil", 0) - System.currentTimeMillis());
     }
 
     public ModelStore.Model model() {
@@ -340,7 +366,7 @@ public final class Transcriber {
             set(State.NO_MODEL, "The speech model isn't downloaded");
             return 60_000;
         }
-        boolean charging = charging();
+        boolean charging = charging() || boosted();
         if (!charging && batteryLevel() < 20) {
             set(State.PAUSED_BATTERY, "Paused: battery below 20%");
             return 120_000;
