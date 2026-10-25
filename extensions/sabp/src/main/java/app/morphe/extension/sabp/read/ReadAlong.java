@@ -629,6 +629,16 @@ public final class ReadAlong {
 
     // ---- stage 4b: the on-device transcript ---------------------------------------------------
 
+    /** How many passages of the document are placed by the on-device transcript. */
+    public int transcriptPassages() {
+        return transcriptPassages;
+    }
+
+    /** Re-matches the transcript now (the Read tab calls this when it opens). */
+    public void refreshTranscriptMatches() {
+        scheduleTranscriptSync(300);
+    }
+
     /** Gives the recogniser the book's names so it spells them as the book does. */
     private void hintNames(BookText t, String folder) {
         if (t.pagesOnly) return;
@@ -655,8 +665,13 @@ public final class ReadAlong {
     private void syncTranscript() {
         final BookText t = text;
         final String folder = folderUri, doc = docUri;
+        if (t == null || t.pagesOnly || folder == null || doc == null) return;
         EppyBook b = EppyPlayer.get(c).book();
-        if (t == null || t.pagesOnly || folder == null || doc == null || b == null || !folder.equals(b.folderUri)) return;
+        if (b == null || !folder.equals(b.folderUri) || b.files.isEmpty()) {
+            // The player isn't ready yet (e.g. just after the app started): try again shortly.
+            scheduleTranscriptSync(3000);
+            return;
+        }
         Transcriber tr = Transcriber.get(c);
         if (!tr.enabled(folder)) return;
         final int gen = ++tsGeneration;

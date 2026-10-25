@@ -173,6 +173,17 @@ private val eppyUiBytecodePatch = bytecodePatch(
                 m.methodCalls().any { it.definingClass == "Landroid/widget/PopupMenu;" && it.name == "show" }
         }
         val classicMenu = hooks.optional("classicMenu") { popupMethods.singleOrNull() }
+        // PlayerActivity.onDestroy unregisters a receiver that onCreate registers. When the router
+        // sends the classic player to eppy, onCreate returns before registering it, and Android 16
+        // then crashes the whole app in onDestroy ("Receiver not registered"). eppy makes that one
+        // call tolerant.
+        val safeDestroy = hooks.optional("safeDestroy") {
+            val m = playerActivity.methods.singleOrNull { it.name == "onDestroy" && it.parameterTypes.isEmpty() }
+            val idx = m?.implementation?.instructions?.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? MethodReference)?.name == "unregisterReceiver"
+            } ?: -1
+            if (m != null && idx >= 0) Pair(m, idx) else null
+        }
         val settingsActivity = classDefBy(SETTINGS_ACTIVITY)
         val settingsOnCreate = hooks.optional("classicSettings") {
             settingsActivity.methods.singleOrNull {
@@ -235,6 +246,16 @@ private val eppyUiBytecodePatch = bytecodePatch(
             nop
             """,
         )
+
+        if (safeDestroy != null) {
+            val m = mPlayerActivity.methods.single { it.name == "onDestroy" && it.parameterTypes.isEmpty() }
+            val call = m.instructions[safeDestroy.second] as com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+            m.removeInstructions(safeDestroy.second, 1)
+            m.addInstructions(
+                safeDestroy.second,
+                "invoke-static {v${call.registerC}, v${call.registerD}}, $EXT/EppyRoute;->safeUnregister(Landroid/content/Context;Landroid/content/BroadcastReceiver;)V",
+            )
+        }
 
         // "Switch to eppy" inside Classic: the player's overflow menu and the settings screen.
         if (classicMenu != null) {

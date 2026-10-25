@@ -60,7 +60,7 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
     private final Transcriber tr;
     private final TranscriptAdapter tAdapter;
     private boolean transcriptMode;
-    private long lastTrRebuild;
+    private long lastTrRebuild, lastProgressAt;
 
     public ReadTab(Host host, EppyTheme t) {
         this.host = host;
@@ -109,7 +109,10 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
             else jumpToPara(pos);
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
-            if (transcriptMode) return false;
+            if (transcriptMode) {
+                transcriptSheet(pos);
+                return true;
+            }
             paraSheet(pos);
             return true;
         });
@@ -213,14 +216,22 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
                 break;
             default:
                 dot = level >= 2 ? t.primary : t.outline;
-                label = levelName(level);
+                label = level == 2 && ra.transcriptPassages() > 0 ? "Matched to the transcript" : levelName(level);
         }
         android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
         d.setShape(android.graphics.drawable.GradientDrawable.OVAL);
         d.setColor(dot);
         statusDot.setBackground(d);
         String msg = ra.interruptedNotice() != null ? ra.interruptedNotice() : ra.message();
-        if (asr && s == ReadAlong.State.READY) msg = (msg.isEmpty() ? "" : msg + " · ") + transcriberStatus(bk);
+        if (asr && s == ReadAlong.State.READY) {
+            msg = (msg.isEmpty() ? "" : msg + " · ") + transcriberStatus(bk);
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastProgressAt > 10_000) {
+                lastProgressAt = now;
+                tAdapter.refreshProgress(bk, null);
+                if (ra.transcriptPassages() == 0) ra.refreshTranscriptMatches();
+            }
+        }
         statusText.setText(label + (msg.isEmpty() ? "" : " · " + msg));
         statusText.setMaxLines(4);
         statusText.setContentDescription("Read along status: " + statusText.getText());
@@ -276,11 +287,13 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
                         + "The transcript and the matched copy are saved in the audiobook's folder.");
                 LinearLayout buttons = Ui.column(c);
                 buttons.setGravity(Gravity.CENTER_HORIZONTAL);
-                buttons.addView(Ui.filledButton(c, t, "Start read-along", v -> startTranscript(false)));
-                buttons.addView(Ui.space(c, 1, 8));
-                buttons.addView(Ui.textButton(c, t, "Start with an EPUB or PDF", v -> startTranscript(true)));
-                buttons.addView(Ui.textButton(c, t, "Use an EPUB or PDF only (no transcription)", v -> host.pickDocument()));
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                buttons.addView(Ui.filledButton(c, t, "Start read-along", v -> startTranscript(false)), fullWidth(0));
+                buttons.addView(Ui.textButton(c, t, "Start with an EPUB or PDF", v -> startTranscript(true)), fullWidth(8));
+                buttons.addView(Ui.textButton(c, t, "Use an EPUB or PDF only", v -> host.pickDocument()), fullWidth(0));
+                TextView note = Ui.text(c, t, "The last option skips transcription: it follows the book by its length and chapter names, and you correct it by long-pressing.", 12, 400, t.onSurfaceVariant);
+                note.setGravity(Gravity.CENTER);
+                buttons.addView(note, fullWidth(4));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 lp.topMargin = Ui.dp(c, 20);
                 empty.addView(buttons, lp);
             } else if (s != ReadAlong.State.LOADING) {
@@ -298,6 +311,12 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
             }
         }
         refresh(false);
+    }
+
+    private LinearLayout.LayoutParams fullWidth(int topDp) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = Ui.dp(c, topDp);
+        return lp;
     }
 
     private void addAction(View chip) {
@@ -370,8 +389,8 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         if (tr.downloadProgress() >= 0) return "Downloading the speech model · " + Math.round(tr.downloadProgress() * 100) + "%";
         if (tr.downloadError() != null) return tr.downloadError();
         if (tr.stoppedAfterCrash()) return "Transcription stopped after repeated problems";
-        long[] pr = tAdapter.progress;
-        String pct = pr[1] > 0 ? Math.round(100.0 * pr[0] / pr[1]) + "% of the book transcribed" : "";
+        String pct = tAdapter.progressLabel();
+        if (tr.boosted()) pct = (pct.isEmpty() ? "" : pct + " · ") + "sped up for " + Math.max(1, tr.boostRemainingMs() / 60_000) + " more min";
         switch (tr.state()) {
             case NO_MODEL:
                 return "The speech model isn't downloaded";
@@ -400,6 +419,14 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
             addAction(Ui.chip(c, t, EppyIcon.DOWNLOAD, "Download speech model", false, v -> askDownload(null)));
         } else if (tr.stoppedAfterCrash()) {
             addAction(Ui.chip(c, t, EppyIcon.REFRESH, "Try again", false, v -> tr.resetCrashes()));
+        }
+        if (tr.modelReady() && !tr.stoppedAfterCrash() && tr.state() != Transcriber.State.DONE) {
+            addAction(Ui.chip(c, t, EppyIcon.SPEED, tr.boosted() ? "Sped up" : "Speed up", tr.boosted(), v -> {
+                boolean on = !tr.boosted();
+                tr.boost(on ? 30 * 60_000L : 0);
+                if (on) Toast.makeText(c, "Transcribing at full speed for 30 minutes. Uses more battery.", Toast.LENGTH_SHORT).show();
+                rebuild();
+            }));
         }
     }
 
@@ -434,6 +461,29 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         sh.item(EppyIcon.CLOSE, "Not now", null, () -> {
         });
         sh.show();
+    }
+
+    private void transcriptSheet(int pos) {
+        TranscriptAdapter.Para p = tAdapter.para(pos);
+        if (p == null || p.pending) return;
+        new Sheet(host.overlayRoot(), t, Ui.time(p.t0))
+                .item(EppyIcon.PLAY, "Play from here", null, () -> jumpToTranscript(pos))
+                .item(EppyIcon.COPY, "Copy text", null, () -> {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) c.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Transcript", p.text));
+                    Toast.makeText(c, "Copied", Toast.LENGTH_SHORT).show();
+                })
+                .item(EppyIcon.SHARE, "Share", null, () -> {
+                    android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    i.setType("text/plain");
+                    EppyBook bk = host.player().book();
+                    i.putExtra(android.content.Intent.EXTRA_TEXT, p.text + (bk != null && bk.folderName != null ? "\n— " + bk.folderName + ", " + Ui.time(p.t0) : ""));
+                    try {
+                        c.startActivity(android.content.Intent.createChooser(i, "Share"));
+                    } catch (Throwable ignored) {
+                    }
+                })
+                .show();
     }
 
     private void jumpToTranscript(int pos) {
@@ -602,7 +652,8 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
 
     private void options() {
         Sheet sh = new Sheet(host.overlayRoot(), t, ra.docName());
-        sh.item(EppyIcon.FOLDER, "Pair a different file", null, host::pickDocument);
+        sh.item(EppyIcon.FOLDER, ra.hasDocument() ? "Pair a different file" : "Add the book's EPUB or PDF",
+                ra.hasDocument() ? null : "Used as a reference: names, and finding its place in the book", host::pickDocument);
         if (ra.speechSupported()) {
             sh.item(EppyIcon.HEADPHONES, ra.autoSyncEnabled() ? "Turn off automatic matching" : "Turn on automatic matching",
                     "Every ~2 min of playback, listens to a 10 s clip of the audiobook file with Android's on-device recogniser. Requires the microphone permission (Android's rule for its speech service). The mic itself isn't used.",
@@ -613,6 +664,13 @@ public final class ReadTab implements PlayerSheet.Tab, ReadAlong.Listener {
         }
         EppyBook bk = host.player().book();
         if (bk != null && tr.enabled(bk.folderUri)) {
+            if (tr.modelReady()) {
+                sh.item(EppyIcon.SPEED, tr.boosted() ? "Back to gentle background work" : "Speed up for 30 minutes",
+                        tr.boosted() ? null : "Works like while charging: more cores, no rests. Uses more battery", () -> {
+                            tr.boost(tr.boosted() ? 0 : 30 * 60_000L);
+                            rebuild();
+                        });
+            }
             sh.item(EppyIcon.CLOSE, "Stop transcribing this book", "What's done is kept; turn it on again any time", () -> {
                 tr.setEnabled(bk.folderUri, false);
                 rebuild();

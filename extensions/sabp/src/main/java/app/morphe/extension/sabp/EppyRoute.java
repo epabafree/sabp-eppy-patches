@@ -213,4 +213,14 @@ public final class EppyRoute {
     static Bundle none() {
         return null;
     }
+
+    /** PlayerActivity.onDestroy's unregisterReceiver, tolerant of a receiver that was never registered (router redirect). */
+    public static void safeUnregister(android.content.Context c, android.content.BroadcastReceiver r) {
+        if (r == null) return;
+        try {
+            c.unregisterReceiver(r);
+        } catch (IllegalArgumentException notRegistered) {
+            // The classic player was sent to eppy before it registered this receiver.
+        }
+    }
 }
