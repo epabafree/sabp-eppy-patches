@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="app.morphe.extension.sabp.shots.CoverGesturesTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-25T00:23:39.341Z" hostname="runnervmtai0g" time="0.052">
+  <properties/>
+  <testcase name="doubleTapAndAccumulate" classname="app.morphe.extension.sabp.shots.CoverGesturesTest" time="0.021"/>
+  <testcase name="slowTapsAreNotADoubleTap" classname="app.morphe.extension.sabp.shots.CoverGesturesTest" time="0.015"/>
+  <testcase name="singleTapDoesNotSeek" classname="app.morphe.extension.sabp.shots.CoverGesturesTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Oct 25, 2026 12:23:39 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+Oct 25, 2026 12:23:39 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+Oct 25, 2026 12:23:39 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: InputEventCompatHandler [2]: Input compatibility 413207127 is enabled for app.morphe.extension.sabp
+]]></system-err>
+</testsuite>

@@ -1,0 +1,44 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :preBuild UP-TO-DATE
+> Task :preDebugBuild UP-TO-DATE
+> Task :generateDebugResources
+> Task :packageDebugResources
+> Task :processDebugNavigationResources
+> Task :preDebugUnitTestBuild UP-TO-DATE
+> Task :javaPreCompileDebug
+> Task :parseDebugLocalResources
+> Task :preparePaparazziDebugResources
+> Task :javaPreCompileDebugUnitTest
+> Task :generateDebugRFile
+> Task :compileDebugKotlin NO-SOURCE
+
+> Task :compileDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/runner/work/sabp-eppy-patches/sabp-eppy-patches/extensions/sabp/src/main/java/app/morphe/extension/sabp/EppyBridge.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :bundleLibRuntimeToJarDebug
+> Task :generateDebugUnitTestStubRFile
+> Task :processDebugJavaRes NO-SOURCE
+> Task :bundleLibCompileToJarDebug
+
+> Task :compileDebugUnitTestKotlin
+w: file:///home/runner/work/sabp-eppy-patches/sabp-eppy-patches/ui-tests/src/test/kotlin/app/morphe/extension/sabp/shots/Geometry.kt:51:45 Java type mismatch: inferred type is 'T? (of fun <T : View> findAll)', but 'T (of fun <T : View> findAll)' was expected.
+
+> Task :processDebugUnitTestJavaRes
+> Task :compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :transformDebugUnitTestClassesWithAsm
+
+> Task :testDebugUnitTest
+See the Paparazzi report at: file:///home/runner/work/sabp-eppy-patches/sabp-eppy-patches/ui-tests/build/reports/paparazzi/debug/index.html
+
+> Task :recordPaparazziDebug
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1792887780605.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/sabp-eppy-patches/sabp-eppy-patches/ui-tests/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 46s
+16 actionable tasks: 16 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
